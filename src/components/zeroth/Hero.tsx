@@ -1,10 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Calendar, ChevronRight, Clock, Flame, Crosshair, Radio, Shield, AlertTriangle } from "lucide-react";
+import {
+  Calendar,
+  ChevronRight,
+  Clock,
+  Flame,
+  Crosshair,
+  Radio,
+  Shield,
+  AlertTriangle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import heroImage from "@/assets/hero-cataclysm.jpg";
 import { browserCompat } from "@/lib/browser-compat";
 import { loadState, saveState, STORAGE_KEYS } from "@/lib/state-persistence";
 import { motion, AnimatePresence } from "framer-motion";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
 
 // openmotion.design inspired transitions
 const staggerContainer = {
@@ -21,11 +35,11 @@ const staggerContainer = {
 
 const fadeUpBlur = {
   hidden: { opacity: 0, y: 30, filter: "blur(12px)" },
-  visible: { 
-    opacity: 1, 
-    y: 0, 
-    filter: "blur(0px)", 
-    transition: { type: "spring", stiffness: 200, damping: 20 } 
+  visible: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { type: "spring", stiffness: 200, damping: 20 },
   },
 };
 
@@ -85,9 +99,7 @@ function CinematicIntro({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Bottom Pulse Bar */}
-      {phase >= 3 && (
-        <div className="absolute bottom-0 inset-x-0 h-1 bg-primary animate-pulse" />
-      )}
+      {phase >= 3 && <div className="absolute bottom-0 inset-x-0 h-1 bg-primary animate-pulse" />}
     </div>
   );
 }
@@ -177,27 +189,76 @@ function EmberCanvas() {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="absolute inset-0 -z-10 size-full pointer-events-none" aria-hidden />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 -z-10 size-full pointer-events-none"
+      aria-hidden
+    />
+  );
 }
 
 /* ─── Animated SVG Radar Sweep ─── */
 function RadarSweep() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none -z-10" aria-hidden>
-      <svg viewBox="0 0 400 400" className="size-[180px] sm:size-[320px] md:size-[420px] opacity-10 sm:opacity-15">
+    <div
+      className="absolute inset-0 flex items-center justify-center pointer-events-none -z-10"
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 400 400"
+        className="size-[180px] sm:size-[320px] md:size-[420px] opacity-10 sm:opacity-15"
+      >
         {[60, 120, 180].map((r) => (
-          <circle key={r} cx="200" cy="200" r={r} fill="none" stroke="var(--primary)" strokeWidth="0.5" strokeDasharray="4 6" opacity="0.5" />
+          <circle
+            key={r}
+            cx="200"
+            cy="200"
+            r={r}
+            fill="none"
+            stroke="var(--primary)"
+            strokeWidth="0.5"
+            strokeDasharray="4 6"
+            opacity="0.5"
+          />
         ))}
-        <line x1="200" y1="20" x2="200" y2="380" stroke="var(--primary)" strokeWidth="0.3" opacity="0.3" />
-        <line x1="20" y1="200" x2="380" y2="200" stroke="var(--primary)" strokeWidth="0.3" opacity="0.3" />
+        <line
+          x1="200"
+          y1="20"
+          x2="200"
+          y2="380"
+          stroke="var(--primary)"
+          strokeWidth="0.3"
+          opacity="0.3"
+        />
+        <line
+          x1="20"
+          y1="200"
+          x2="380"
+          y2="200"
+          stroke="var(--primary)"
+          strokeWidth="0.3"
+          opacity="0.3"
+        />
         <g className="animate-radar-sweep" style={{ transformOrigin: "200px 200px" }}>
           <defs>
-            <linearGradient id="sweep-grad" x1="0" y1="0" x2="1" y2="0" gradientTransform="rotate(0 0.5 0.5)">
+            <linearGradient
+              id="sweep-grad"
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="0"
+              gradientTransform="rotate(0 0.5 0.5)"
+            >
               <stop offset="0%" stopColor="var(--primary)" stopOpacity="0" />
               <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.6" />
             </linearGradient>
           </defs>
-          <path d="M200,200 L200,20 A180,180,0,0,1,356,116 Z" fill="url(#sweep-grad)" opacity="0.4" />
+          <path
+            d="M200,200 L200,20 A180,180,0,0,1,356,116 Z"
+            fill="url(#sweep-grad)"
+            opacity="0.4"
+          />
         </g>
       </svg>
     </div>
@@ -219,13 +280,18 @@ function FlipDigit({ value, label }: { value: string; label: string }) {
           </div>
         ))}
       </div>
-      <span className="font-mono-tech text-[8px] sm:text-[10px] uppercase text-muted-foreground tracking-widest">{label}</span>
+      <span className="font-mono-tech text-[8px] sm:text-[10px] uppercase text-muted-foreground tracking-widest">
+        {label}
+      </span>
     </div>
   );
 }
 
 /* ─── HERO MAIN ─── */
 export function Hero({ onRegister }: { onRegister: () => void }) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
   const [clock, setClock] = useState<string | null>(null);
   const [cd, setCd] = useState({ d: "00", h: "00", m: "00", s: "00" });
 
@@ -253,8 +319,35 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
     return () => clearInterval(id);
   }, []);
 
+  useGSAP(
+    () => {
+      if (!sectionRef.current || !imgRef.current) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+      // Image scale-fade: grows from 0.92 to 1.0 as it enters
+      gsap.fromTo(
+        imgRef.current,
+        { scale: 0.92, opacity: 0.7 },
+        {
+          scale: 1,
+          opacity: 0.9,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.5,
+          },
+        },
+      );
+    },
+    { scope: sectionRef },
+  );
+
   /* ── Intro sequence played persistence ── */
-  const [introDone, setIntroComplete] = useState(() => loadState<boolean>(STORAGE_KEYS.INTRO_PLAYED, false));
+  const [introDone, setIntroComplete] = useState(() =>
+    loadState<boolean>(STORAGE_KEYS.INTRO_PLAYED, false),
+  );
 
   const handleIntroDone = useCallback(() => {
     saveState(STORAGE_KEYS.INTRO_PLAYED, true);
@@ -264,9 +357,10 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
   return (
     <>
       {!introDone && <CinematicIntro onComplete={handleIntroDone} />}
-      <section id="top" className="relative isolate overflow-hidden scanlines">
+      <section id="top" ref={sectionRef} className="relative isolate overflow-hidden scanlines">
         {/* Crisp Classic Hero Cataclysm Background Layers */}
         <img
+          ref={imgRef}
           src={heroImage}
           alt="Planetary Defence Cataclysm"
           width={1920}
@@ -279,10 +373,17 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
         <div className="absolute bottom-0 inset-x-0 h-32 sm:h-48 bg-gradient-to-t from-background to-transparent pointer-events-none -z-10" />
 
         {/* Hero Interactive Content Layer */}
-        <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="mx-auto flex max-w-6xl flex-col items-center px-2 py-3 text-center sm:px-6 lg:px-8 sm:py-8">
-
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="mx-auto flex max-w-6xl flex-col items-center px-2 py-3 text-center sm:px-6 lg:px-8 sm:py-8"
+        >
           {/* ── DEFCON Badge ── */}
-          <motion.div variants={fadeUpBlur} className="inline-flex items-center gap-2 border border-primary/60 bg-primary/15 px-3 py-1 sm:px-4 sm:py-1.5 clip-tactical mb-2.5 sm:mb-3">
+          <motion.div
+            variants={fadeUpBlur}
+            className="inline-flex items-center gap-2 border border-primary/60 bg-primary/15 px-3 py-1 sm:px-4 sm:py-1.5 clip-tactical mb-2.5 sm:mb-3"
+          >
             <span className="relative flex size-2">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-70" />
               <span className="relative inline-flex size-2 rounded-full bg-primary" />
@@ -319,7 +420,10 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
               </div>
 
               <div className="shrink-0">
-                <div className="size-12 sm:size-24 md:size-28 flex items-center justify-center transition-transform duration-300 hover:scale-110 drop-shadow-[0_0_15px_rgba(255,200,0,0.4)] animate-float" style={{ animationDelay: "1s" }}>
+                <div
+                  className="size-12 sm:size-24 md:size-28 flex items-center justify-center transition-transform duration-300 hover:scale-110 drop-shadow-[0_0_15px_rgba(255,200,0,0.4)] animate-float"
+                  style={{ animationDelay: "1s" }}
+                >
                   <img
                     src="/images/jec-31years.png?v=20260826"
                     alt="31 Years of Excellence"
@@ -340,12 +444,16 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </motion.div>
 
           {/* ── Main Event Title ── */}
-          <div className="relative mt-4 sm:mt-8">
+          <div className="relative mt-2 sm:mt-4">
             <RadarSweep />
             <div className="px-2 py-1 sm:px-8 sm:py-4">
               <motion.h1 variants={fadeUpBlur} className="font-display uppercase">
-                <span className="block text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-foreground tracking-tighter"
-                      style={{ textShadow: "0 0 30px rgba(255,255,255,0.2), 0 0 60px rgba(224,76,17,0.15)" }}>
+                <span
+                  className="block text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-foreground tracking-tighter"
+                  style={{
+                    textShadow: "0 0 30px rgba(255,255,255,0.2), 0 0 60px rgba(224,76,17,0.15)",
+                  }}
+                >
                   MAKEATHON
                 </span>
                 <span className="mt-1 block text-base sm:text-3xl md:text-4xl lg:text-5xl font-extrabold shimmer-text tracking-wide">
@@ -356,10 +464,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
             <Crosshair className="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 size-5 sm:size-8 text-primary/40 animate-float" />
           </div>
 
-          
-
           {/* ── Split-Flap Countdown ── */}
-          <motion.div variants={fadeUpBlur} className="mt-12 sm:mt-20 px-2 py-1">
+          <motion.div variants={fadeUpBlur} className="mt-16 sm:mt-28 px-2 py-1">
             <div className="flex items-center gap-1.5 mb-1.5 justify-center">
               <Shield className="size-3 sm:size-3.5 text-primary" />
               <span className="font-mono-tech text-[8px] sm:text-[9px] tracking-[0.2em] text-primary font-bold uppercase">
@@ -368,19 +474,26 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
             </div>
             <div className="flex items-start gap-1 sm:gap-2 justify-center">
               <FlipDigit value={cd.d} label="Days" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">:</span>
+              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+                :
+              </span>
               <FlipDigit value={cd.h} label="Hrs" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">:</span>
+              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+                :
+              </span>
               <FlipDigit value={cd.m} label="Min" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">:</span>
+              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+                :
+              </span>
               <FlipDigit value={cd.s} label="Sec" />
             </div>
           </motion.div>
 
-          
-
           {/* ── Date & Venue (Updated Date: SEPT 23) ── */}
-          <motion.div variants={fadeUpBlur} className="mt-3.5 sm:mt-4 flex w-full max-w-md items-center gap-2.5 sm:gap-3 border border-accent/70 bg-black/80 backdrop-blur-md px-3 py-2 sm:px-4 sm:py-2.5 clip-tactical text-left shadow-[0_4px_20px_rgba(0,0,0,0.6)]">
+          <motion.div
+            variants={fadeUpBlur}
+            className="mt-3.5 sm:mt-4 flex w-full max-w-md items-center gap-2.5 sm:gap-3 border border-accent/70 bg-black/80 backdrop-blur-md px-3 py-2 sm:px-4 sm:py-2.5 clip-tactical text-left shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+          >
             <Calendar className="size-4 sm:size-5 shrink-0 text-accent" aria-hidden />
             <div>
               <p className="font-display text-xs sm:text-sm font-bold uppercase tracking-[0.12em] text-accent">
@@ -393,7 +506,10 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </motion.div>
 
           {/* ── CTA Buttons ── */}
-          <motion.div variants={fadeUpBlur} className="mt-4 sm:mt-5 flex flex-col gap-2 sm:flex-row w-full sm:w-auto">
+          <motion.div
+            variants={fadeUpBlur}
+            className="mt-4 sm:mt-5 flex flex-col gap-2 sm:flex-row w-full sm:w-auto"
+          >
             <Button
               variant="alert"
               size="default"
@@ -418,19 +534,29 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </motion.div>
 
           {/* ── Prize & Fee Info ── */}
-          <motion.div variants={fadeUpBlur} className="mt-3.5 sm:mt-5 flex w-full max-w-lg flex-row gap-2 sm:gap-3 justify-center">
+          <motion.div
+            variants={fadeUpBlur}
+            className="mt-3.5 sm:mt-5 flex w-full max-w-lg flex-row gap-2 sm:gap-3 justify-center"
+          >
             <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-black/85 backdrop-blur-md px-2.5 py-2.5 rounded border border-primary/50">
-              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">PRIZE CACHE</p>
+              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">
+                PRIZE CACHE
+              </p>
               <p className="font-display text-lg sm:text-3xl font-black text-foreground">₹22K</p>
-              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">+ MERCH & CERTS</p>
+              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">
+                + MERCH & CERTS
+              </p>
             </div>
             <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-black/85 backdrop-blur-md px-2.5 py-2.5 rounded border border-accent/50">
-              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">REGISTRATION</p>
+              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">
+                REGISTRATION
+              </p>
               <p className="font-display text-lg sm:text-3xl font-black text-foreground">₹200</p>
-              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">FOOD & WI-FI INCLUDED</p>
+              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">
+                FOOD & WI-FI INCLUDED
+              </p>
             </div>
           </motion.div>
-
         </motion.div>
       </section>
     </>

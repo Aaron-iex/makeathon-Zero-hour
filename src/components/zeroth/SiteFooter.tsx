@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 
 export function SiteFooter() {
   return (
-    <motion.footer 
+    <motion.footer
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
@@ -43,9 +43,15 @@ export function SiteFooter() {
               ["#", "Home"],
               ["#events", "Event schedule"],
               ["#about", "Mission briefing & FAQ"],
-            ].map(([href, label]) => (
+            ].map(([href, label], idx, arr) => (
               <li key={href}>
-                <a href={href} className="transition-colors hover:text-accent min-h-[44px] inline-flex items-center touch-manipulation">
+                <span className="font-mono-tech text-muted-foreground mr-1.5" aria-hidden>
+                  {idx === arr.length - 1 ? "└──" : "├──"}
+                </span>
+                <a
+                  href={href}
+                  className="transition-colors hover:text-accent nav-link-hover min-h-[44px] inline-flex items-center touch-manipulation"
+                >
                   {label}
                 </a>
               </li>
@@ -58,15 +64,57 @@ export function SiteFooter() {
             EMERGENCY CONTACT
           </h4>
           <ul className="mt-4 space-y-2 font-mono-tech text-xs text-muted-foreground">
-            <li><a href="tel:+916381198548" className="transition-colors hover:text-accent inline-flex items-center min-h-[44px] touch-manipulation">+91-6381198548</a></li>
-            <li><a href="mailto:mylabathulaaaronnissi@gmail.com" className="transition-colors hover:text-accent inline-flex items-center min-h-[44px] touch-manipulation break-all">PRESS: mylabathulaaaronnissi@gmail.com</a></li>
-            <li>STATUS: DEFCON 1 — SEPT 23 · 5-HOUR SPRINT</li>
+            <li>
+              <span className="font-mono-tech text-muted-foreground mr-1.5" aria-hidden>
+                ├──
+              </span>
+              <a
+                href="tel:+916381198548"
+                className="transition-colors hover:text-accent nav-link-hover inline-flex items-center min-h-[44px] touch-manipulation"
+              >
+                +91-6381198548
+              </a>
+            </li>
+            <li>
+              <span className="font-mono-tech text-muted-foreground mr-1.5" aria-hidden>
+                ├──
+              </span>
+              <a
+                href="mailto:mylabathulaaaronnissi@gmail.com"
+                className="transition-colors hover:text-accent nav-link-hover inline-flex items-center min-h-[44px] touch-manipulation break-all"
+              >
+                PRESS: mylabathulaaaronnissi@gmail.com
+              </a>
+            </li>
+            <li>
+              <span className="font-mono-tech text-muted-foreground mr-1.5" aria-hidden>
+                └──
+              </span>
+              STATUS: DEFCON 1 — SEPT 23 · 5-HOUR SPRINT
+            </li>
           </ul>
         </div>
       </div>
 
-      <div className="border-t border-border px-4 py-5 text-center font-mono-tech text-[10px] tracking-[0.2em] text-muted-foreground">
-        © {new Date().getFullYear()} PROJECT ZEROTH HOUR // ALL BROADCASTS SIMULATED
+      <div className="border-t border-border px-4 py-5 font-mono-tech text-[10px] tracking-[0.2em] text-muted-foreground flex flex-col md:flex-row items-center justify-between gap-3 max-w-7xl mx-auto">
+        <div className="flex flex-wrap items-center justify-center gap-3.5 text-[9px] uppercase tracking-wider">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-terminal-green animate-pulse" />
+            CPU: NOMINAL
+          </span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-terminal-green" />
+            NET: ARMED
+          </span>
+          <span className="flex items-center gap-1.5 text-accent font-bold">
+            <span className="size-1.5 rounded-full bg-accent" />
+            SYNC: DEFCON 1
+          </span>
+        </div>
+        <span className="text-center">© 2026 PROJECT ZEROTH HOUR® — JAYA ENGINEERING COLLEGE</span>
+        <span className="font-mono-tech text-[9px] text-muted-foreground/80">
+          ZH // REV 2.6 // 2026
+        </span>
       </div>
     </motion.footer>
   );

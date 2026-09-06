@@ -160,7 +160,9 @@ function mapThreatSectorForForm(track: string): string {
 /**
  * Submits form data directly into the Dual-Sync Google Form (https://forms.gle/2EKyiYHmae8oWEtf7)
  */
-export async function submitDirectlyToGoogleForm(formData: Omit<Registration, "id" | "timestamp">): Promise<boolean> {
+export async function submitDirectlyToGoogleForm(
+  formData: Omit<Registration, "id" | "timestamp">,
+): Promise<boolean> {
   try {
     const body = new URLSearchParams();
     // 1. Squad Name
@@ -201,7 +203,7 @@ export async function submitDirectlyToGoogleForm(formData: Omit<Registration, "i
  * Pull registrations live from the Google Sheet
  */
 export async function fetchRemoteRegistrations(
-  urlOverride?: string
+  urlOverride?: string,
 ): Promise<{ success: boolean; data: Registration[]; message?: string }> {
   const url = (urlOverride || getGoogleSheetsWebhookUrl()).trim();
   if (!url) {
@@ -228,20 +230,28 @@ export async function fetchRemoteRegistrations(
     const json = await res.json();
     if (Array.isArray(json)) {
       const parsed: Registration[] = json.map((item: any) => ({
-        id: String(item.id || item.ID || item["Pass ID"] || `ZH-${Math.floor(100000 + Math.random() * 900000)}`),
+        id: String(
+          item.id ||
+            item.ID ||
+            item["Pass ID"] ||
+            `ZH-${Math.floor(100000 + Math.random() * 900000)}`,
+        ),
         teamName: String(item.teamName || item["Team Name"] || "Unnamed Squad"),
         leaderName: String(item.leaderName || item["Leader Name"] || "Unknown"),
         email: String(item.email || item.Email || ""),
         phone: String(item.phone || item.Phone || item["Mobile Number"] || ""),
-        institution: String(item.institution || item.Institution || item["Institution / College"] || ""),
+        institution: String(
+          item.institution || item.Institution || item["Institution / College"] || "",
+        ),
         track: String(item.track || item.Track || item["Threat Sector"] || "General"),
         teamSize: String(item.teamSize || item["Team Size"] || item["Squad Size"] || "4"),
         brief: item.brief || item.Brief || item["Mission Brief"] || "",
-        timestamp: item.timestamp || item.Timestamp || item["Registered At"] || new Date().toISOString(),
+        timestamp:
+          item.timestamp || item.Timestamp || item["Registered At"] || new Date().toISOString(),
         checkedIn: Boolean(
           item.checkedIn ||
-            item.CheckedIn ||
-            String(item["Checked In"] || "").toUpperCase() === "YES"
+          item.CheckedIn ||
+          String(item["Checked In"] || "").toUpperCase() === "YES",
         ),
         status: item.status || "confirmed",
       }));
@@ -259,14 +269,18 @@ export async function fetchRemoteRegistrations(
       });
 
       const merged = Array.from(map.values()).sort(
-        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
       );
 
       saveAllRegistrations(merged);
       return { success: true, data: merged };
     }
 
-    return { success: true, data: getStoredRegistrations(), message: "Remote replied, but no array found." };
+    return {
+      success: true,
+      data: getStoredRegistrations(),
+      message: "Remote replied, but no array found.",
+    };
   } catch (err) {
     console.warn("Could not fetch remote registrations directly:", err);
     return {
@@ -278,7 +292,7 @@ export async function fetchRemoteRegistrations(
 }
 
 export async function submitRegistrationData(
-  formData: Omit<Registration, "id" | "timestamp">
+  formData: Omit<Registration, "id" | "timestamp">,
 ): Promise<SubmissionResult> {
   const uniqueNum = Math.floor(100000 + Math.random() * 900000);
   const id = `ZH-${uniqueNum}`;
@@ -371,7 +385,9 @@ export function exportRegistrationsToCsv(registrations: Registration[]): void {
     `"${(r.track || "").replace(/"/g, '""')}"`,
     r.teamSize,
     `"${(r.brief || "").replace(/"/g, '""')}"`,
-    r.timestamp ? new Date(r.timestamp).toLocaleString("en-GB") : new Date().toLocaleString("en-GB"),
+    r.timestamp
+      ? new Date(r.timestamp).toLocaleString("en-GB")
+      : new Date().toLocaleString("en-GB"),
     r.checkedIn ? "YES" : "NO",
   ]);
 

@@ -1,6 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Anchor, Flame, Rocket, Waves, Zap, type LucideIcon, ChevronRight, Trophy, X, AlertTriangle, ShieldCheck, Cpu, Activity, Lightbulb } from "lucide-react";
+import {
+  Anchor,
+  Flame,
+  Rocket,
+  Waves,
+  Zap,
+  type LucideIcon,
+  ChevronRight,
+  Trophy,
+  X,
+  AlertTriangle,
+  ShieldCheck,
+  Cpu,
+  Activity,
+  Lightbulb,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TRACKS, type Track } from "@/data/zeroth";
 import { motion } from "framer-motion";
@@ -112,7 +127,7 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
 
       if (e.key === "Tab" && modalRef.current) {
         const focusables = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         if (focusables.length === 0) return;
         const first = focusables[0];
@@ -140,51 +155,59 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
 
   return (
     <section id="sectors" className="mx-auto max-w-7xl px-4 py-10 sm:py-16 sm:px-6 lg:px-8">
-
       {/* ── HIGHLY NOTICEABLE MANDATORY CORE DIRECTIVE BANNER ── */}
       <div className="relative mb-10 overflow-hidden border-2 border-primary bg-black/90 p-4 sm:p-6 shadow-[0_0_40px_rgba(224,76,17,0.35)] clip-tactical">
         <div className="absolute inset-0 scanlines opacity-40 pointer-events-none" />
         <div className="absolute -right-10 -bottom-10 size-40 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-        
+
         <div className="relative flex flex-col items-center justify-center text-center gap-3">
           <div className="flex items-center gap-2 font-mono-tech text-[10px] sm:text-xs tracking-[0.25em] text-primary font-black uppercase">
             <AlertTriangle className="size-4 animate-bounce text-primary" />
             CORE EVENT LOOP PROTOCOL // MANDATORY RULE
           </div>
-          
+
           <div className="flex overflow-x-auto items-center justify-start sm:justify-center gap-2 sm:gap-4 font-display font-black text-base sm:text-2xl md:text-3xl uppercase text-foreground tracking-wide pb-2 w-full max-w-full scrollbar-none">
             <span className="shrink-0 px-2.5 py-1 bg-red-950/80 border border-red-500/60 text-red-400 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">
               CRISIS
             </span>
-            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">→</span>
+            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">
+              →
+            </span>
             <span className="shrink-0 px-2.5 py-1 bg-amber-950/80 border border-amber-500/60 text-amber-300 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]">
               SENSE
             </span>
-            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">→</span>
+            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">
+              →
+            </span>
             <span className="shrink-0 px-2.5 py-1 bg-blue-950/80 border border-blue-500/60 text-blue-300 drop-shadow-[0_0_10px_rgba(59,130,246,0.5)]">
               THINK
             </span>
-            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">→</span>
+            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">
+              →
+            </span>
             <span className="shrink-0 px-2.5 py-1 bg-emerald-950/80 border border-emerald-500/60 text-emerald-300 drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
               ADAPT
             </span>
-            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">→</span>
+            <span className="shrink-0 text-primary font-mono-tech text-base sm:text-xl font-bold">
+              →
+            </span>
             <span className="shrink-0 px-2.5 py-1 bg-accent/20 border border-accent text-accent drop-shadow-[0_0_15px_rgba(255,200,0,0.6)]">
               SURVIVE
             </span>
           </div>
 
           <p className="max-w-2xl font-mono-tech text-[11px] sm:text-xs text-muted-foreground uppercase tracking-wider mt-1">
-            Every submission must demonstrate a physical sensor, real-time decision logic, and tangible hardware actuation.
+            Every submission must demonstrate a physical sensor, real-time decision logic, and
+            tangible hardware actuation.
           </p>
         </div>
       </div>
 
       {/* Section Header */}
-      <motion.div 
-        initial={{ opacity: 0, y: 30 }} 
-        whileInView={{ opacity: 1, y: 0 }} 
-        transition={{ type: "spring", stiffness: 200, damping: 20 }} 
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 200, damping: 20 }}
         viewport={{ once: true, margin: "-50px" }}
         className="max-w-3xl"
       >
@@ -199,14 +222,16 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
           <span className="text-alert-gradient inline-block">Sense, Adapt & Survive</span>
         </h2>
         <p className="mt-4 text-base sm:text-lg text-muted-foreground leading-relaxed">
-          Select a high-stakes engineering problem below. Click <strong className="text-primary">"View Crisis Details"</strong> to expand scenario specifications, hardware challenges, and implementation examples!
+          Select a high-stakes engineering problem below. Click{" "}
+          <strong className="text-primary">"View Crisis Details"</strong> to expand scenario
+          specifications, hardware challenges, and implementation examples!
         </p>
       </motion.div>
 
       {/* ── OVERALL PRIZE CACHE (MOBILE-OPTIMIZED TACTICAL PODS) ── */}
       <div className="relative mt-8 overflow-hidden border-2 border-accent/60 bg-gradient-to-br from-black/95 via-card/95 to-black/95 p-5 sm:p-7 clip-tactical shadow-[0_0_35px_rgba(255,200,0,0.2)]">
         <div className="absolute inset-0 grid-tactical opacity-20 pointer-events-none" />
-        
+
         {/* Banner Header */}
         <div className="relative flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-accent/30 pb-4 text-center sm:text-left">
           <div className="flex items-center gap-2.5">
@@ -286,11 +311,11 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
       </div>
 
       {/* Track Cards */}
-      <motion.div 
-        initial="hidden" 
-        whileInView="visible" 
-        viewport={{ once: true, margin: "-50px" }} 
-        variants={{ visible: { transition: { staggerChildren: 0.15 } } }} 
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-50px" }}
+        variants={{ visible: { transition: { staggerChildren: 0.15 } } }}
         className="mt-6 sm:mt-8 grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3"
       >
         {TRACKS.map((track, idx) => {
@@ -300,10 +325,19 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
 
           return (
             <motion.article
-              variants={{ hidden: { opacity: 0, y: 30 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 200, damping: 20 } } }}
+              variants={{
+                hidden: { opacity: 0, y: 30 },
+                visible: {
+                  opacity: 1,
+                  y: 0,
+                  transition: { type: "spring", stiffness: 200, damping: 20 },
+                },
+              }}
+              whileHover={{ scale: 1.02, y: -2 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
               key={track.id}
               className={`panel-tactical relative flex flex-col justify-between p-5 sm:p-6 transition-all duration-300
-                          hover:-translate-y-1.5 group cursor-pointer bg-black/90 ${
+                          hover:-translate-y-1.5 group cursor-pointer bg-black/90 ascii-corners group-hover:shadow-[inset_0_0_24px_var(--track-glow)] ${
                             isFeatured
                               ? "border-2 border-accent/70 shadow-[0_0_25px_rgba(255,200,0,0.25)]"
                               : "border border-border/90 hover:border-primary/60"
@@ -363,7 +397,7 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
                     backgroundColor: `color-mix(in oklab, ${color.accent} 10%, transparent)`,
                   }}
                 >
-                  // THREAT: {track.threat}
+                  [ {track.threat} ]
                 </span>
               </div>
 
@@ -407,135 +441,151 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
                   <ChevronRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </Button>
               </div>
+
+              {/* Protocol ID telemetry stamp */}
+              <div className="relative mt-2.5 flex items-center justify-between font-mono-tech text-[8px] sm:text-[9px] text-muted-foreground/70 tracking-[0.2em] uppercase border-t border-border/40 pt-1.5">
+                <span>PRTCL // {track.code}</span>
+                <span className="text-primary/70">SEC-CLEARANCE // L1</span>
+              </div>
             </motion.article>
           );
         })}
       </motion.div>
 
       {/* ── EXPANDABLE CRISIS DETAIL MODAL (PORTALED TO BODY) ── */}
-      {mounted && selectedTrack && createPortal(
-        <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="crisis-detail-title"
-          onClick={(e) => e.target === e.currentTarget && handleCloseModal()}
-        >
-          <div 
-            className="h-full w-full overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch p-2.5 sm:p-6 pb-[env(safe-area-inset-bottom,24px)]"
+      {mounted &&
+        selectedTrack &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md animate-in fade-in duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="crisis-detail-title"
             onClick={(e) => e.target === e.currentTarget && handleCloseModal()}
           >
-            <div className="flex min-h-full items-start sm:items-center justify-center py-2 sm:py-6">
-              <div
-                ref={modalRef}
-                className="relative w-full max-w-3xl my-auto bg-background border-2 border-primary p-4 sm:p-8 clip-tactical shadow-[0_0_50px_rgba(224,76,17,0.4)]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {/* Close Button */}
-                <button
-                  ref={closeBtnRef}
-                  onClick={handleCloseModal}
-                  aria-label="Close details modal"
-                  className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border hover:border-primary transition-colors touch-manipulation cursor-pointer z-10 clip-tactical"
+            <div
+              className="h-full w-full overflow-y-auto overscroll-contain -webkit-overflow-scrolling-touch p-2.5 sm:p-6 pb-[env(safe-area-inset-bottom,24px)]"
+              onClick={(e) => e.target === e.currentTarget && handleCloseModal()}
+            >
+              <div className="flex min-h-full items-start sm:items-center justify-center py-2 sm:py-6">
+                <div
+                  ref={modalRef}
+                  className="relative w-full max-w-3xl my-auto bg-background border-2 border-primary p-4 sm:p-8 clip-tactical shadow-[0_0_50px_rgba(224,76,17,0.4)]"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <X className="size-5" />
-                </button>
+                  {/* Close Button */}
+                  <button
+                    ref={closeBtnRef}
+                    onClick={handleCloseModal}
+                    aria-label="Close details modal"
+                    className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 border border-border hover:border-primary transition-colors touch-manipulation cursor-pointer z-10 clip-tactical"
+                  >
+                    <X className="size-5" />
+                  </button>
 
-                {/* Header Badge */}
-                <div className="flex items-center gap-3 mb-2 pr-12">
-                  <span className="font-mono-tech text-xs tracking-[0.2em] font-bold text-primary px-2.5 py-0.5 border border-primary/40 bg-primary/10">
-                    {selectedTrack.code}
-                  </span>
-                  <span className="font-mono-tech text-xs text-muted-foreground uppercase font-bold tracking-widest truncate">
-                    {selectedTrack.crisisName}
-                  </span>
-                </div>
-
-                <h2 id="crisis-detail-title" className="font-display text-2xl sm:text-4xl font-black uppercase text-foreground pr-10">
-                  {selectedTrack.title}
-                </h2>
-
-                <div className="mt-6 space-y-6">
-                  {/* Scenario */}
-                  <div className="border-l-2 border-primary/80 pl-4 py-2 bg-primary/5">
-                    <h4 className="font-mono-tech text-xs tracking-[0.2em] text-primary uppercase font-bold mb-1 flex items-center gap-2">
-                      <AlertTriangle className="size-4 text-primary" />
-                      SCENARIO BRIEFING
-                    </h4>
-                    <p className="text-sm sm:text-base text-foreground leading-relaxed italic">
-                      "{selectedTrack.scenario}"
-                    </p>
+                  {/* Header Badge */}
+                  <div className="flex items-center gap-3 mb-2 pr-12">
+                    <span className="font-mono-tech text-xs tracking-[0.2em] font-bold text-primary px-2.5 py-0.5 border border-primary/40 bg-primary/10">
+                      {selectedTrack.code}
+                    </span>
+                    <span className="font-mono-tech text-xs text-muted-foreground uppercase font-bold tracking-widest truncate">
+                      {selectedTrack.crisisName}
+                    </span>
                   </div>
 
-                  {/* Engineering Problem */}
-                  <div className="border border-border bg-card/40 p-4">
-                    <h4 className="font-mono-tech text-xs tracking-[0.2em] text-accent uppercase font-bold mb-2 flex items-center gap-2">
-                      <Cpu className="size-4 text-accent" />
-                      ENGINEERING PROBLEM
-                    </h4>
-                    <p className="text-sm sm:text-base text-muted-foreground leading-relaxed font-semibold">
-                      {selectedTrack.engineeringProblem}
-                    </p>
-                  </div>
+                  <h2
+                    id="crisis-detail-title"
+                    className="font-display text-2xl sm:text-4xl font-black uppercase text-foreground pr-10"
+                  >
+                    {selectedTrack.title}
+                  </h2>
 
-                  {/* Example Ideas */}
-                  <div>
-                    <h4 className="font-mono-tech text-xs tracking-[0.2em] text-emerald-400 uppercase font-bold mb-3 flex items-center gap-2">
-                      <Lightbulb className="size-4 text-emerald-400" />
-                      EXAMPLE IMPLEMENTATION CONCEPTS
-                    </h4>
-                    <ul className="grid gap-2">
-                      {selectedTrack.exampleIdeas.map((idea, i) => (
-                        <li key={i} className="flex items-start gap-2.5 text-sm text-foreground bg-muted/20 border border-muted/30 p-3">
-                          <span className="font-mono-tech text-xs font-bold text-primary shrink-0 mt-0.5">0{i+1}.</span>
-                          <span>{idea}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Mandatory Constraint (if any) */}
-                  {selectedTrack.constraint && (
-                    <div className="border border-amber-500/50 bg-amber-950/20 p-4">
-                      <h4 className="font-mono-tech text-xs tracking-[0.2em] text-amber-400 uppercase font-bold mb-1 flex items-center gap-2">
-                        <ShieldCheck className="size-4 text-amber-400" />
-                        HARDWARE CONSTRAINT
+                  <div className="mt-6 space-y-6">
+                    {/* Scenario */}
+                    <div className="border-l-2 border-primary/80 pl-4 py-2 bg-primary/5">
+                      <h4 className="font-mono-tech text-xs tracking-[0.2em] text-primary uppercase font-bold mb-1 flex items-center gap-2">
+                        <AlertTriangle className="size-4 text-primary" />
+                        SCENARIO BRIEFING
                       </h4>
-                      <p className="text-xs sm:text-sm text-amber-200/90">
-                        {selectedTrack.constraint}
+                      <p className="text-sm sm:text-base text-foreground leading-relaxed italic">
+                        "{selectedTrack.scenario}"
                       </p>
                     </div>
-                  )}
-                </div>
 
-                {/* Action buttons inside modal */}
-                <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <Button
-                    variant="tactical"
-                    onClick={handleCloseModal}
-                    className="w-full sm:w-auto min-h-[44px] font-mono-tech text-xs tracking-wider cursor-pointer"
-                  >
-                    ← RETURN TO CRISIS LIST
-                  </Button>
+                    {/* Engineering Problem */}
+                    <div className="border border-border bg-card/40 p-4">
+                      <h4 className="font-mono-tech text-xs tracking-[0.2em] text-accent uppercase font-bold mb-2 flex items-center gap-2">
+                        <Cpu className="size-4 text-accent" />
+                        ENGINEERING PROBLEM
+                      </h4>
+                      <p className="text-sm sm:text-base text-muted-foreground leading-relaxed font-semibold">
+                        {selectedTrack.engineeringProblem}
+                      </p>
+                    </div>
 
-                  <Button
-                    variant="alert"
-                    onClick={() => {
-                      const title = selectedTrack.title;
-                      handleCloseModal();
-                      onRegister(title);
-                    }}
-                    className="w-full sm:w-auto min-h-[44px] font-bold tracking-wider cursor-pointer"
-                  >
-                    REGISTER FOR THIS CRISIS →
-                  </Button>
+                    {/* Example Ideas */}
+                    <div>
+                      <h4 className="font-mono-tech text-xs tracking-[0.2em] text-emerald-400 uppercase font-bold mb-3 flex items-center gap-2">
+                        <Lightbulb className="size-4 text-emerald-400" />
+                        EXAMPLE IMPLEMENTATION CONCEPTS
+                      </h4>
+                      <ul className="grid gap-2">
+                        {selectedTrack.exampleIdeas.map((idea, i) => (
+                          <li
+                            key={i}
+                            className="flex items-start gap-2.5 text-sm text-foreground bg-muted/20 border border-muted/30 p-3"
+                          >
+                            <span className="font-mono-tech text-xs font-bold text-primary shrink-0 mt-0.5">
+                              0{i + 1}.
+                            </span>
+                            <span>{idea}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Mandatory Constraint (if any) */}
+                    {selectedTrack.constraint && (
+                      <div className="border border-amber-500/50 bg-amber-950/20 p-4">
+                        <h4 className="font-mono-tech text-xs tracking-[0.2em] text-amber-400 uppercase font-bold mb-1 flex items-center gap-2">
+                          <ShieldCheck className="size-4 text-amber-400" />
+                          HARDWARE CONSTRAINT
+                        </h4>
+                        <p className="text-xs sm:text-sm text-amber-200/90">
+                          {selectedTrack.constraint}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action buttons inside modal */}
+                  <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <Button
+                      variant="tactical"
+                      onClick={handleCloseModal}
+                      className="w-full sm:w-auto min-h-[44px] font-mono-tech text-xs tracking-wider cursor-pointer"
+                    >
+                      ← RETURN TO CRISIS LIST
+                    </Button>
+
+                    <Button
+                      variant="alert"
+                      onClick={() => {
+                        const title = selectedTrack.title;
+                        handleCloseModal();
+                        onRegister(title);
+                      }}
+                      className="w-full sm:w-auto min-h-[44px] font-bold tracking-wider cursor-pointer"
+                    >
+                      REGISTER FOR THIS CRISIS →
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body,
+        )}
     </section>
   );
 }

@@ -7,8 +7,10 @@ import {
   Users2,
   Sparkles,
   EyeOff,
+  AlertTriangle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
 
 const SABOTAGES = [
   {
@@ -50,15 +52,21 @@ export function SabotageQuiz() {
         <div className="absolute -right-24 -top-24 size-48 rounded-full bg-accent/20 blur-3xl pointer-events-none" />
         <div className="absolute -left-24 -bottom-24 size-48 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
 
-        <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr] lg:items-center">
+        <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr] lg:items-start">
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 border border-accent/40 bg-accent/12 px-3 py-1.5 font-mono-tech text-[10px] tracking-[0.2em] text-accent clip-tactical">
               <Gamepad2 className="size-3.5" aria-hidden />
               TACTICAL INTERFERENCE EVENT
             </div>
 
-            <h2 className="font-display text-3xl font-black uppercase tracking-tight sm:text-4xl">
-              The <span className="text-alert-gradient">Sabotage Quiz</span>
+            <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-black uppercase tracking-tight">
+              <span className="inline-block whitespace-nowrap">
+                <span className="text-primary font-mono-tech">[</span> The
+              </span>{" "}
+              <span className="inline-block whitespace-nowrap">
+                <span className="text-alert-gradient">Sabotage Quiz</span>{" "}
+                <span className="text-primary font-mono-tech">]</span>
+              </span>
             </h2>
 
             <p className="text-base leading-relaxed text-muted-foreground">
@@ -94,7 +102,7 @@ export function SabotageQuiz() {
             </div>
 
             <div className="border border-border/60 bg-background/50 p-4 font-mono-tech text-xs tracking-wider text-muted-foreground flex gap-3 items-center">
-              <span className="text-accent animate-pulse">⚠️</span>
+              <AlertTriangle className="size-4 shrink-0 text-accent animate-pulse" aria-hidden />
               <span>
                 Sabotage actions are designed for fun and must be executed in the presence of an
                 event coordinator.
@@ -112,25 +120,30 @@ export function SabotageQuiz() {
               {SABOTAGES.map((sabotage) => {
                 const Icon = sabotage.icon;
                 return (
-                  <Card
+                  <motion.div
                     key={sabotage.name}
-                    className={`border p-4 flex flex-col justify-between transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${sabotage.color}`}
+                    whileHover={{ scale: 1.02, y: -2 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   >
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <Icon className="size-5" />
-                        <span className="font-mono-tech text-[10px] tracking-wider px-2 py-0.5 border border-current rounded-full">
-                          {sabotage.duration}
-                        </span>
+                    <Card
+                      className={`border p-4 flex flex-col justify-between transition-all duration-300 hover:shadow-lg ${sabotage.color} h-full`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <Icon className="size-5" />
+                          <span className="font-mono-tech text-[10px] tracking-wider px-2 py-0.5 border border-current rounded-full">
+                            {sabotage.duration}
+                          </span>
+                        </div>
+                        <h4 className="mt-3 font-display text-sm font-bold text-foreground">
+                          {sabotage.name}
+                        </h4>
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                          {sabotage.effect}
+                        </p>
                       </div>
-                      <h4 className="mt-3 font-display text-sm font-bold text-foreground">
-                        {sabotage.name}
-                      </h4>
-                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                        {sabotage.effect}
-                      </p>
-                    </div>
-                  </Card>
+                    </Card>
+                  </motion.div>
                 );
               })}
             </div>

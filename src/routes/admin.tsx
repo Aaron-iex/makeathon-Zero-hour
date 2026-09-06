@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button } from '@/components/ui/button';
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Button } from "@/components/ui/button";
 import {
   getStoredRegistrations,
   saveRegistrationLocally,
@@ -13,8 +13,8 @@ import {
   syncDeleteToRemote,
   BACKUP_GOOGLE_FORM_URL,
   type Registration,
-} from '@/lib/registrations';
-import { TRACKS } from '@/data/zeroth';
+} from "@/lib/registrations";
+import { TRACKS } from "@/data/zeroth";
 import {
   Download,
   Link as LinkIcon,
@@ -42,9 +42,9 @@ import {
   SlidersHorizontal,
   Layers,
   Sparkles,
-} from 'lucide-react';
+} from "lucide-react";
 
-export const Route = createFileRoute('/admin')({
+export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
 
@@ -58,7 +58,7 @@ export function AdminDashboard() {
   const [pinError, setPinError] = useState(false);
 
   const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
@@ -113,7 +113,11 @@ export function AdminDashboard() {
   }, [loadData]);
 
   const getSavedPin = () => {
-    return import.meta.env['VITE_ADMIN_PIN'] || localStorage.getItem(PIN_STORAGE_KEY) || DEFAULT_ADMIN_PIN;
+    return (
+      import.meta.env["VITE_ADMIN_PIN"] ||
+      localStorage.getItem(PIN_STORAGE_KEY) ||
+      DEFAULT_ADMIN_PIN
+    );
   };
 
   const handleLogin = (e: React.FormEvent) => {
@@ -145,7 +149,13 @@ export function AdminDashboard() {
       } else {
         loadData();
       }
-      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setLastSyncTime(
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      );
     } catch (err) {
       console.warn("Sync error:", err);
       loadData();
@@ -168,7 +178,11 @@ export function AdminDashboard() {
   };
 
   const handleDeleteSquad = (id: string, teamName: string) => {
-    if (window.confirm(`Are you sure you want to delete squad "${teamName}" (${id})? This will remove it locally and from Google Sheets.`)) {
+    if (
+      window.confirm(
+        `Are you sure you want to delete squad "${teamName}" (${id})? This will remove it locally and from Google Sheets.`,
+      )
+    ) {
       // 1. Instant local deletion
       deleteRegistrationLocally(id);
       loadData();
@@ -298,7 +312,8 @@ export function AdminDashboard() {
             Admin Command Center
           </h1>
           <p className="text-xs text-neutral-400 mt-2 leading-relaxed">
-            Enter the organizer security passcode to access participant rosters, live stats, and sync settings.
+            Enter the organizer security passcode to access participant rosters, live stats, and
+            sync settings.
           </p>
 
           <form onSubmit={handleLogin} className="space-y-4 mt-6 text-left">
@@ -335,7 +350,10 @@ export function AdminDashboard() {
           </form>
 
           <div className="border-t border-neutral-800/80 mt-6 pt-4 text-center">
-            <a href="/" className="inline-flex items-center gap-1 font-mono-tech text-xs text-neutral-400 hover:text-white transition-colors">
+            <a
+              href="/"
+              className="inline-flex items-center gap-1 font-mono-tech text-xs text-neutral-400 hover:text-white transition-colors"
+            >
               ← Return to Main Broadcast
             </a>
           </div>
@@ -356,7 +374,8 @@ export function AdminDashboard() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-display text-base sm:text-lg font-bold text-white tracking-tight">
-                  ZEROTH HOUR <span className="text-neutral-500 font-normal">|</span> Command Console
+                  ZEROTH HOUR <span className="text-neutral-500 font-normal">|</span> Command
+                  Console
                 </h1>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono-tech bg-emerald-950/60 border border-emerald-700/50 text-emerald-400 font-semibold">
                   <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -377,7 +396,9 @@ export function AdminDashboard() {
               disabled={isSyncing}
               className="h-9 font-mono-tech text-xs border-neutral-800 hover:bg-neutral-900 text-neutral-200"
             >
-              <RefreshCw className={`size-3.5 mr-1.5 ${isSyncing ? "animate-spin text-primary" : ""}`} />
+              <RefreshCw
+                className={`size-3.5 mr-1.5 ${isSyncing ? "animate-spin text-primary" : ""}`}
+              />
               {isSyncing ? "Syncing..." : "Sync Live"}
             </Button>
 
@@ -427,25 +448,26 @@ export function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        
         {/* KPI Metrics Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
-              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">TOTAL SQUADS</span>
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                TOTAL SQUADS
+              </span>
               <Users className="size-5 text-primary/70" />
             </div>
             <p className="font-display text-2xl sm:text-3xl font-black text-white mt-2">
               {metrics.totalSquads}
             </p>
-            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
-              Registered Teams
-            </p>
+            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">Registered Teams</p>
           </div>
 
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
-              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">TOTAL OPERATIVES</span>
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                TOTAL OPERATIVES
+              </span>
               <Users className="size-5 text-accent/70" />
             </div>
             <p className="font-display text-2xl sm:text-3xl font-black text-accent mt-2">
@@ -458,20 +480,30 @@ export function AdminDashboard() {
 
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
-              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">CHECKED-IN SQUADS</span>
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                CHECKED-IN SQUADS
+              </span>
               <CheckCircle2 className="size-5 text-emerald-400/70" />
             </div>
             <p className="font-display text-2xl sm:text-3xl font-black text-emerald-400 mt-2">
-              {metrics.checkedInCount} <span className="text-sm font-normal text-neutral-500 font-sans">/ {metrics.totalSquads}</span>
+              {metrics.checkedInCount}{" "}
+              <span className="text-sm font-normal text-neutral-500 font-sans">
+                / {metrics.totalSquads}
+              </span>
             </p>
             <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
-              {metrics.totalSquads > 0 ? Math.round((metrics.checkedInCount / metrics.totalSquads) * 100) : 0}% attendance verified
+              {metrics.totalSquads > 0
+                ? Math.round((metrics.checkedInCount / metrics.totalSquads) * 100)
+                : 0}
+              % attendance verified
             </p>
           </div>
 
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
-              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">CLOUD SYNC & BACKUP</span>
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                CLOUD SYNC & BACKUP
+              </span>
               <Database className="size-5 text-neutral-400" />
             </div>
             <p className="font-mono-tech text-sm font-bold text-white mt-2 flex items-center gap-1.5">
@@ -530,7 +562,9 @@ export function AdminDashboard() {
                   }`}
                 >
                   <span className="truncate max-w-[140px] sm:max-w-none">{t.title}</span>
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${isActive ? "bg-neutral-950 text-accent font-bold" : "bg-neutral-700/60 text-neutral-300"}`}>
+                  <span
+                    className={`px-1.5 py-0.2 rounded text-[10px] ${isActive ? "bg-neutral-950 text-accent font-bold" : "bg-neutral-700/60 text-neutral-300"}`}
+                  >
                     {count}
                   </span>
                 </button>
@@ -606,7 +640,9 @@ export function AdminDashboard() {
               <div className="size-12 rounded-full bg-neutral-800/80 flex items-center justify-center mx-auto mb-3 text-neutral-400">
                 <Users className="size-6" />
               </div>
-              <p className="font-mono-tech text-sm text-neutral-300 font-semibold">NO MATCHING SQUADS FOUND</p>
+              <p className="font-mono-tech text-sm text-neutral-300 font-semibold">
+                NO MATCHING SQUADS FOUND
+              </p>
               <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
                 {registrations.length === 0
                   ? "No registrations entered yet. When students register on the website, they will immediately appear here."
@@ -649,7 +685,10 @@ export function AdminDashboard() {
                       onClick={() => setSelectedSquad(r)}
                     >
                       {/* ID */}
-                      <td className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td
+                        className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center gap-1.5">
                           <span>{r.id}</span>
                           <button
@@ -657,7 +696,11 @@ export function AdminDashboard() {
                             className="text-neutral-500 hover:text-white p-1 rounded transition-colors"
                             title="Copy ID"
                           >
-                            {copiedId === r.id ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                            {copiedId === r.id ? (
+                              <Check className="size-3 text-emerald-400" />
+                            ) : (
+                              <Copy className="size-3" />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -731,7 +774,9 @@ export function AdminDashboard() {
                           }`}
                           title="Toggle Check-In (Updates both local & Google Sheets)"
                         >
-                          <span className={`size-1.5 rounded-full ${r.checkedIn ? "bg-emerald-400" : "bg-neutral-500"}`} />
+                          <span
+                            className={`size-1.5 rounded-full ${r.checkedIn ? "bg-emerald-400" : "bg-neutral-500"}`}
+                          />
                           {r.checkedIn ? "CHECKED IN" : "PENDING"}
                         </button>
                       </td>
@@ -763,7 +808,6 @@ export function AdminDashboard() {
             </div>
           )}
         </div>
-
       </main>
 
       {/* ── Squad Detail Modal ── */}
@@ -803,43 +847,67 @@ export function AdminDashboard() {
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">LEADER NAME</p>
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  LEADER NAME
+                </p>
                 <p className="font-bold text-neutral-200 mt-1">{selectedSquad.leaderName}</p>
               </div>
 
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">SQUAD SIZE</p>
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  SQUAD SIZE
+                </p>
                 <p className="font-bold text-neutral-200 mt-1">{selectedSquad.teamSize} Members</p>
               </div>
 
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">EMAIL</p>
-                <a href={`mailto:${selectedSquad.email}`} className="font-mono-tech text-accent hover:underline mt-1 block truncate">
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  EMAIL
+                </p>
+                <a
+                  href={`mailto:${selectedSquad.email}`}
+                  className="font-mono-tech text-accent hover:underline mt-1 block truncate"
+                >
                   {selectedSquad.email || "—"}
                 </a>
               </div>
 
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">PHONE</p>
-                <a href={`tel:${selectedSquad.phone}`} className="font-mono-tech text-primary hover:underline mt-1 block">
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  PHONE
+                </p>
+                <a
+                  href={`tel:${selectedSquad.phone}`}
+                  className="font-mono-tech text-primary hover:underline mt-1 block"
+                >
                   {selectedSquad.phone || "—"}
                 </a>
               </div>
 
               <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">INSTITUTION / COLLEGE</p>
-                <p className="font-medium text-neutral-200 mt-1">{selectedSquad.institution || "—"}</p>
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  INSTITUTION / COLLEGE
+                </p>
+                <p className="font-medium text-neutral-200 mt-1">
+                  {selectedSquad.institution || "—"}
+                </p>
               </div>
 
               <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">ASSIGNED THREAT SECTOR</p>
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  ASSIGNED THREAT SECTOR
+                </p>
                 <p className="font-bold text-accent mt-1">{selectedSquad.track}</p>
               </div>
 
               {selectedSquad.brief && (
                 <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
-                  <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">MISSION PROTOTYPE BRIEF</p>
-                  <p className="text-neutral-300 mt-1 leading-relaxed whitespace-pre-wrap">{selectedSquad.brief}</p>
+                  <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                    MISSION PROTOTYPE BRIEF
+                  </p>
+                  <p className="text-neutral-300 mt-1 leading-relaxed whitespace-pre-wrap">
+                    {selectedSquad.brief}
+                  </p>
                 </div>
               )}
             </div>
@@ -850,7 +918,9 @@ export function AdminDashboard() {
                 size="sm"
                 onClick={() => handleToggleCheckIn(selectedSquad)}
                 className={`font-mono-tech text-xs ${
-                  selectedSquad.checkedIn ? "border-emerald-600 text-emerald-400" : "border-neutral-700"
+                  selectedSquad.checkedIn
+                    ? "border-emerald-600 text-emerald-400"
+                    : "border-neutral-700"
                 }`}
               >
                 <CheckCircle2 className="size-3.5 mr-1.5" />
@@ -883,10 +953,15 @@ export function AdminDashboard() {
           >
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
-                <span className="font-mono-tech text-[10px] tracking-widest text-accent font-bold">MANUAL OVERRIDE</span>
+                <span className="font-mono-tech text-[10px] tracking-widest text-accent font-bold">
+                  MANUAL OVERRIDE
+                </span>
                 <h3 className="font-display text-lg font-bold text-white">Enroll Squad On-Site</h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} className="text-neutral-400 hover:text-white">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-neutral-400 hover:text-white"
+              >
                 <X className="size-5" />
               </button>
             </div>
@@ -894,7 +969,9 @@ export function AdminDashboard() {
             <form onSubmit={handleAddSubmit} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">SQUAD NAME *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    SQUAD NAME *
+                  </span>
                   <input
                     required
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary"
@@ -905,7 +982,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">LEADER NAME *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    LEADER NAME *
+                  </span>
                   <input
                     required
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary"
@@ -916,7 +995,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">CONTACT EMAIL *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    CONTACT EMAIL *
+                  </span>
                   <input
                     required
                     type="email"
@@ -928,7 +1009,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">MOBILE NUMBER *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    MOBILE NUMBER *
+                  </span>
                   <input
                     required
                     type="tel"
@@ -940,7 +1023,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block col-span-2">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">INSTITUTION / COLLEGE *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    INSTITUTION / COLLEGE *
+                  </span>
                   <input
                     required
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary"
@@ -951,7 +1036,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">SECTOR *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    SECTOR *
+                  </span>
                   <select
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary font-mono-tech"
                     value={newSquad.track}
@@ -966,7 +1053,9 @@ export function AdminDashboard() {
                 </label>
 
                 <label className="space-y-1 block">
-                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">TEAM SIZE *</span>
+                  <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                    TEAM SIZE *
+                  </span>
                   <select
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary font-mono-tech"
                     value={newSquad.teamSize}
@@ -982,7 +1071,9 @@ export function AdminDashboard() {
               </div>
 
               <label className="space-y-1 block">
-                <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">PROJECT BRIEF (OPTIONAL)</span>
+                <span className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
+                  PROJECT BRIEF (OPTIONAL)
+                </span>
                 <textarea
                   rows={2}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-lg p-2.5 text-white outline-none focus:border-primary"
@@ -993,7 +1084,12 @@ export function AdminDashboard() {
               </label>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800">
-                <Button type="button" variant="outline" size="sm" onClick={() => setShowAddModal(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddModal(false)}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" variant="alert" size="sm">
@@ -1017,10 +1113,17 @@ export function AdminDashboard() {
           >
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
-                <span className="font-mono-tech text-[10px] tracking-widest text-primary font-bold">INTEGRATION HUB</span>
-                <h3 className="font-display text-lg font-bold text-white">Google Sheets & Forms Real-time Sync</h3>
+                <span className="font-mono-tech text-[10px] tracking-widest text-primary font-bold">
+                  INTEGRATION HUB
+                </span>
+                <h3 className="font-display text-lg font-bold text-white">
+                  Google Sheets & Forms Real-time Sync
+                </h3>
               </div>
-              <button onClick={() => setShowSettingsModal(false)} className="text-neutral-400 hover:text-white">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-neutral-400 hover:text-white"
+              >
                 <X className="size-5" />
               </button>
             </div>
@@ -1029,9 +1132,12 @@ export function AdminDashboard() {
               {/* Direct Form Link Alert */}
               <div className="bg-accent/10 border border-accent/30 p-3.5 rounded-lg flex items-center justify-between gap-3">
                 <div>
-                  <p className="font-mono-tech font-bold text-accent text-xs">OFFICIAL BACKUP GOOGLE FORM</p>
+                  <p className="font-mono-tech font-bold text-accent text-xs">
+                    OFFICIAL BACKUP GOOGLE FORM
+                  </p>
                   <p className="text-neutral-300 text-[11px] mt-0.5">
-                    If cloud sync is slow during high traffic, users are automatically directed here:
+                    If cloud sync is slow during high traffic, users are automatically directed
+                    here:
                   </p>
                 </div>
                 <Button variant="tactical" size="sm" className="shrink-0" asChild>
@@ -1072,10 +1178,13 @@ export function AdminDashboard() {
                   ⚡ Complete Google Apps Script (Supports Inserts, Check-in Sync & Deletions)
                 </p>
                 <p className="text-neutral-400 leading-relaxed">
-                  Paste the code below in your Google Sheet's <strong>Extensions &gt; Apps Script</strong> and deploy as a Web App (Access: <em>Anyone</em>). It handles registration writes, check-in updates, deletions, and live data retrieval:
+                  Paste the code below in your Google Sheet's{" "}
+                  <strong>Extensions &gt; Apps Script</strong> and deploy as a Web App (Access:{" "}
+                  <em>Anyone</em>). It handles registration writes, check-in updates, deletions, and
+                  live data retrieval:
                 </p>
                 <pre className="bg-black p-3 rounded font-mono-tech text-[11px] overflow-x-auto text-emerald-400 border border-neutral-800 leading-relaxed max-h-60 overflow-y-auto">
-{`function doPost(e) {
+                  {`function doPost(e) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   var data = JSON.parse(e.postData.contents);
   var lock = LockService.getScriptLock();

@@ -1,9 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { ChevronRight, Clock, Flame, MapPin, Radio, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TIMELINE, type Stage } from "@/data/zeroth";
 import { loadState, saveState, STORAGE_KEYS } from "@/lib/state-persistence";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+gsap.registerPlugin(ScrollTrigger);
 
 const FILTERS: { id: Stage | "all"; label: string; icon: typeof Clock }[] = [
   { id: "all", label: "All phases", icon: Radio },
@@ -13,9 +17,21 @@ const FILTERS: { id: Stage | "all"; label: string; icon: typeof Clock }[] = [
 ];
 
 const STAGE_COLORS: Record<string, { dot: string; glow: string; border: string }> = {
-  prep:    { dot: "bg-blue-400",   glow: "shadow-[0_0_12px_rgba(96,165,250,0.5)]", border: "border-blue-400/40" },
-  hacking: { dot: "bg-primary",    glow: "shadow-[0_0_12px_rgba(224,76,17,0.5)]",  border: "border-primary/40" },
-  pitch:   { dot: "bg-accent",     glow: "shadow-[0_0_12px_rgba(234,179,8,0.5)]",  border: "border-accent/40" },
+  prep: {
+    dot: "bg-blue-400",
+    glow: "shadow-[0_0_12px_rgba(96,165,250,0.5)]",
+    border: "border-blue-400/40",
+  },
+  hacking: {
+    dot: "bg-primary",
+    glow: "shadow-[0_0_12px_rgba(224,76,17,0.5)]",
+    border: "border-primary/40",
+  },
+  pitch: {
+    dot: "bg-accent",
+    glow: "shadow-[0_0_12px_rgba(234,179,8,0.5)]",
+    border: "border-accent/40",
+  },
 };
 
 export function Roadmap({
@@ -28,7 +44,33 @@ export function Roadmap({
   onExpand?: () => void;
 }) {
   const [active, setActiveRaw] = useState<Stage | "all">(() =>
-    loadState<Stage | "all">(STORAGE_KEYS.ROADMAP_FILTER, "all")
+    loadState<Stage | "all">(STORAGE_KEYS.ROADMAP_FILTER, "all"),
+  );
+
+  const containerRef = useRef<HTMLOListElement>(null);
+
+  useGSAP(
+    () => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const items = containerRef.current?.querySelectorAll(".timeline-item");
+      if (!items?.length) return;
+      gsap.fromTo(
+        items,
+        { y: 40, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          stagger: 0.12,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: containerRef.current,
+            start: "top 85%",
+            once: true,
+          },
+        },
+      );
+    },
+    { scope: containerRef },
   );
 
   const setActive = useCallback((stage: Stage | "all") => {
@@ -56,8 +98,7 @@ export function Roadmap({
             <span className="h-px w-6 bg-primary" />
           </div>
           <h2 className="font-display text-2xl font-black uppercase sm:text-4xl md:text-5xl">
-            Event{" "}
-            <span className="text-alert-gradient">Schedule & Roadmap</span>
+            Event <span className="text-alert-gradient">Schedule & Roadmap</span>
           </h2>
           <div className="mx-auto mt-4 flex max-w-xl items-center justify-center gap-2.5 border border-accent/50 bg-accent/12 px-5 py-2.5 clip-tactical">
             <MapPin className="size-4 text-accent shrink-0" />
@@ -80,7 +121,9 @@ export function Roadmap({
                     : "border border-border bg-card text-muted-foreground hover:text-accent hover:border-accent/40"
                 }`}
               >
-                <f.icon className={`size-3.5 transition-transform ${active === f.id ? "animate-pulse" : "group-hover:rotate-12"}`} />
+                <f.icon
+                  className={`size-3.5 transition-transform ${active === f.id ? "animate-pulse" : "group-hover:rotate-12"}`}
+                />
                 {f.label}
               </button>
             ))}
@@ -88,31 +131,50 @@ export function Roadmap({
         )}
 
         {/* Timeline */}
-        <ol className={`relative ${preview ? "mt-10" : "mt-12"} ml-3 sm:ml-8 space-y-5 sm:space-y-6`}>
+        <ol
+          ref={containerRef}
+          className={`relative ${preview ? "mt-10" : "mt-12"} ml-3 sm:ml-8 space-y-5 sm:space-y-6`}
+        >
           {/* Vertical connecting line */}
           <div className="absolute left-0 sm:left-0 top-0 bottom-0 w-px bg-gradient-to-b from-primary/60 via-accent/40 to-primary/20" />
 
           {displayEvents.map((evt, idx) => {
-            const colors = STAGE_COLORS[evt.stage] || STAGE_COLORS['hacking']!;
+            const colors = STAGE_COLORS[evt.stage] || STAGE_COLORS["hacking"]!;
             return (
-              <motion.li
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.4, delay: idx * 0.08 }}
-                key={evt.title}
-                className="group relative pl-8 sm:pl-12"
-              >
+              <li key={evt.title} className="timeline-item group relative pl-8 sm:pl-12">
                 {/* Timeline dot */}
-                <div className={`absolute left-[-5px] sm:left-[-6px] top-5 size-3 sm:size-3.5 rounded-full ${colors.dot} ${colors.glow}
-                                transition-all duration-300 group-hover:scale-150 ring-2 ring-background`} />
+                <div
+                  className={`absolute left-[-7px] sm:left-[-8px] top-5 size-4 rounded-full ${colors.dot} ${colors.glow}
+                                transition-all duration-300 group-hover:scale-125 ring-2 ring-background flex items-center justify-center z-10`}
+                >
+                  <div className="size-1.5 rounded-full bg-black/80" />
+                </div>
 
                 {/* Event Card */}
-                <div className={`panel-tactical p-4 sm:p-6 transition-all duration-300
+                <div
+                  className={`panel-tactical p-4 sm:p-6 transition-all duration-300 relative overflow-hidden
                                 group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-panel)]
-                                border-l-2 ${colors.border}`}>
+                                border-l-2 ${colors.border}`}
+                >
+                  {/* Vertical progress indicator bar on right edge */}
+                  <div
+                    className="absolute top-0 bottom-0 right-0 w-1 bg-white/5 flex flex-col justify-end pointer-events-none"
+                    aria-hidden
+                  >
+                    <div
+                      className="w-full bg-gradient-to-t from-primary to-accent transition-all duration-500 opacity-60 group-hover:opacity-100"
+                      style={{ height: `${Math.min(100, Math.max(25, (idx + 1) * 15))}%` }}
+                    />
+                  </div>
+
                   {/* Meta row */}
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <span
+                      className="font-mono-tech text-primary/60 select-none hidden sm:inline"
+                      aria-hidden
+                    >
+                      ┃
+                    </span>
                     <span className="border border-primary/50 bg-primary/12 px-2.5 py-0.5 font-mono-tech text-[9px] sm:text-[10px] tracking-[0.18em] text-primary font-bold">
                       {evt.phase}
                     </span>
@@ -142,12 +204,12 @@ export function Roadmap({
                       STATUS: {evt.status}
                     </span>
                     <div className="h-px flex-1 mx-3 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-                    <span className="font-mono-tech text-[9px] text-muted-foreground">
-                      PHASE {String(idx + 1).padStart(2, "0")}/{String(displayEvents.length).padStart(2, "0")}
+                    <span className="font-mono-tech text-[9px] text-primary">
+                      STAGE / {String(idx + 1).padStart(2, "0")}
                     </span>
                   </div>
                 </div>
-              </motion.li>
+              </li>
             );
           })}
         </ol>
@@ -155,9 +217,16 @@ export function Roadmap({
         {/* Preview expand button */}
         {preview && (
           <div className="mt-8 sm:mt-10 text-center">
-            <Button variant="tactical" size="xl" onClick={onExpand}
-              className="group min-h-[44px] hover:shadow-[0_0_20px_rgba(255,200,0,0.25)] transition-shadow">
-              <ChevronRight className="size-4 transition-transform group-hover:translate-x-1" aria-hidden />
+            <Button
+              variant="tactical"
+              size="xl"
+              onClick={onExpand}
+              className="group min-h-[44px] hover:shadow-[0_0_20px_rgba(255,200,0,0.25)] transition-shadow"
+            >
+              <ChevronRight
+                className="size-4 transition-transform group-hover:translate-x-1"
+                aria-hidden
+              />
               View full build schedule
             </Button>
           </div>
@@ -186,8 +255,12 @@ export function Roadmap({
               ₹200 per squad. Open to students, researchers, and builders. Secure your clearance
               badge before squad lockdown.
             </p>
-            <Button variant="alert" size="xl" onClick={onRegister}
-              className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:scale-[1.02] transition-all duration-300">
+            <Button
+              variant="alert"
+              size="xl"
+              onClick={onRegister}
+              className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:scale-[1.02] transition-all duration-300"
+            >
               <Flame className="size-4 group-hover:rotate-12 transition-transform" aria-hidden />
               Secure squad clearance
             </Button>

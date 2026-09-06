@@ -1,8 +1,6 @@
 import { motion } from "framer-motion";
 
-const SPONSORS = [
-  { name: "Cooper Elevators", image: "/images/sponsors/image.png" },
-];
+const SPONSORS = [{ name: "Cooper Elevators", image: "/images/sponsors/image.png" }];
 
 export function Sponsors() {
   return (
@@ -25,13 +23,19 @@ export function Sponsors() {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
               key={`${sponsor.name}-${index}`}
-              className="group flex items-center justify-center transition-all duration-300 hover:scale-110"
+              className="flex flex-col items-center gap-4"
             >
-              <img
-                src={sponsor.image}
-                alt={`${sponsor.name} logo`}
-                loading="lazy" className="max-w-full h-20 sm:h-24 w-auto object-contain transition-all duration-300"
-              />
+              <span className="font-mono-tech text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
+                // POWERED BY
+              </span>
+              <div className="group flex items-center justify-center transition-all duration-300 hover:scale-110 border-rotate-fast p-2">
+                <img
+                  src={sponsor.image}
+                  alt={`${sponsor.name} logo`}
+                  loading="lazy"
+                  className="max-w-full h-20 sm:h-24 w-auto object-contain transition-all duration-300"
+                />
+              </div>
             </motion.div>
           ))}
         </div>

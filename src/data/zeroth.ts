@@ -24,13 +24,16 @@ export const TRACKS: Track[] = [
     category: "PREVENTION",
     icon: "flame",
     threat: "SEISMIC DEFENCE",
-    brief: "Detect abnormal vibration/motion in real time and trigger a physical protective response before damage occurs.",
-    scenario: "A quake has already begun. Buildings are swaying, equipment is at risk, and there's no time to evacuate — only time to react. The ground doesn't ask permission before it moves.",
-    engineeringProblem: "Detect abnormal vibration/motion in real time and trigger a physical protective response before damage occurs.",
+    brief:
+      "Detect abnormal vibration/motion in real time and trigger a physical protective response before damage occurs.",
+    scenario:
+      "A quake has already begun. Buildings are swaying, equipment is at risk, and there's no time to evacuate — only time to react. The ground doesn't ask permission before it moves.",
+    engineeringProblem:
+      "Detect abnormal vibration/motion in real time and trigger a physical protective response before damage occurs.",
     exampleIdeas: [
       "Adaptive counterweight / tuned mass response that shifts to counteract detected sway",
       "Auto-cutoff system that kills power/gas to a mock structure the instant unsafe vibration is sensed",
-      "Active isolation base that lifts or decouples a platform from vibration using a servo/motor"
+      "Active isolation base that lifts or decouples a platform from vibration using a servo/motor",
     ],
     stack: [],
   },
@@ -43,12 +46,14 @@ export const TRACKS: Track[] = [
     icon: "waves",
     threat: "HYDRO DEFENCE",
     brief: "Detect rising water level and trigger a physical adaptation — before the water wins.",
-    scenario: "Water is rising and it isn't stopping. Coastal infrastructure that was built for yesterday's sea level is drowning today. Something has to adapt to a shoreline that keeps moving.",
-    engineeringProblem: "Detect rising water level and trigger a physical adaptation — before the water wins.",
+    scenario:
+      "Water is rising and it isn't stopping. Coastal infrastructure that was built for yesterday's sea level is drowning today. Something has to adapt to a shoreline that keeps moving.",
+    engineeringProblem:
+      "Detect rising water level and trigger a physical adaptation — before the water wins.",
     exampleIdeas: [
       "Auto-rising flood barrier (servo/motor-driven gate that lifts as water rises)",
       "Adaptive drainage/pump system that activates proportionally to water level",
-      "Buoyant platform that lifts critical equipment automatically to stay above the waterline"
+      "Buoyant platform that lifts critical equipment automatically to stay above the waterline",
     ],
     stack: [],
   },
@@ -60,13 +65,16 @@ export const TRACKS: Track[] = [
     category: "PREVENTION",
     icon: "rocket",
     threat: "OFF-WORLD DEFENCE",
-    brief: "Sense changing environmental conditions (light, temp, dust, power) and adapt operation autonomously.",
-    scenario: "The first Martian settlement is alive — barely. Extreme temperature swings, dust storms, and thin unstable power make \"normal operation\" impossible. Something has to keep adapting just so life support doesn't quietly fail.",
-    engineeringProblem: "Build an autonomous system that senses a changing environmental condition (light, temperature, dust/particulate, or power availability) and adapts operation to keep something alive or protected.",
+    brief:
+      "Sense changing environmental conditions (light, temp, dust, power) and adapt operation autonomously.",
+    scenario:
+      'The first Martian settlement is alive — barely. Extreme temperature swings, dust storms, and thin unstable power make "normal operation" impossible. Something has to keep adapting just so life support doesn\'t quietly fail.',
+    engineeringProblem:
+      "Build an autonomous system that senses a changing environmental condition (light, temperature, dust/particulate, or power availability) and adapts operation to keep something alive or protected.",
     exampleIdeas: [
       "Adaptive greenhouse controller that adjusts lighting/ventilation/irrigation for a mock plant enclosure",
       "Dust-storm protection system that detects reduced visibility/airflow change and shields or retracts exposed equipment",
-      "Adaptive solar power system that reroutes power/load priority as simulated sunlight changes"
+      "Adaptive solar power system that reroutes power/load priority as simulated sunlight changes",
     ],
     stack: [],
   },
@@ -78,13 +86,16 @@ export const TRACKS: Track[] = [
     category: "MITIGATION",
     icon: "anchor",
     threat: "COMMS DEFENCE",
-    brief: "Build a hardware communication path that works without relying on existing cell/internet infrastructure.",
-    scenario: "Every signal just died. No towers, no satellites, no network — just silence where coordination used to be. Somewhere out there, someone needs to be heard.",
-    engineeringProblem: "Build a hardware communication path that works without relying on existing cell/internet infrastructure.",
+    brief:
+      "Build a hardware communication path that works without relying on existing cell/internet infrastructure.",
+    scenario:
+      "Every signal just died. No towers, no satellites, no network — just silence where coordination used to be. Somewhere out there, someone needs to be heard.",
+    engineeringProblem:
+      "Build a hardware communication path that works without relying on existing cell/internet infrastructure.",
     exampleIdeas: [
       "LoRa point-to-point emergency messenger (send/receive a short text or status code)",
       "RF relay node that extends a signal's range by one hop between two fixed points",
-      "Priority beacon system that transmits a distress code (light/sound/RF) detectable from a distance without networked infra"
+      "Priority beacon system that transmits a distress code (light/sound/RF) detectable from a distance without networked infra",
     ],
     stack: [],
   },
@@ -96,13 +107,16 @@ export const TRACKS: Track[] = [
     category: "PREVENTION",
     icon: "flame",
     threat: "BIO DEFENCE",
-    brief: "Detect rising contamination/air-quality danger in a zone and automatically seal or isolate it before spread.",
-    scenario: "Something got out. An unknown contaminant is spreading through the air, and nobody knows how fast or how far. Every second of delay means another zone lost. Containment isn't optional — it's the only thing standing between this and total collapse.",
-    engineeringProblem: "Build a hardware system that detects rising contamination/air-quality danger in a zone and automatically seals or isolates it before the spread continues.",
+    brief:
+      "Detect rising contamination/air-quality danger in a zone and automatically seal or isolate it before spread.",
+    scenario:
+      "Something got out. An unknown contaminant is spreading through the air, and nobody knows how fast or how far. Every second of delay means another zone lost. Containment isn't optional — it's the only thing standing between this and total collapse.",
+    engineeringProblem:
+      "Build a hardware system that detects rising contamination/air-quality danger in a zone and automatically seals or isolates it before the spread continues.",
     exampleIdeas: [
       "Automated quarantine airlock — servo-driven doors seal a zone the instant contamination crosses a threshold",
       "Contamination gradient mapper — a small sensor array detects which direction concentration is increasing and flags the spread path",
-      "Auto-ventilation containment system — instead of sealing, actively filters/exhausts contaminated air from an enclosed zone while sealing exits"
+      "Auto-ventilation containment system — instead of sealing, actively filters/exhausts contaminated air from an enclosed zone while sealing exits",
     ],
     stack: [],
   },
@@ -115,14 +129,18 @@ export const TRACKS: Track[] = [
     icon: "zap",
     featured: true,
     threat: "WILDCARD DEFENCE",
-    brief: "Bring your own hardware crisis. Any sense → decide → act system with real physical response.",
-    scenario: "Not every crisis has been named yet. Somewhere, something is about to fail, and it doesn't match any protocol on file. This is your chance to define the threat — and the system that survives it.",
-    engineeringProblem: "Bring your own hardware crisis. Any sense → decide → act system — embedded, IoT, robotics, power, RF, control systems — as long as it demonstrates a real physical response to a real physical problem.",
-    constraint: "Must still follow the core rule of the event — a sensor, a decision, and a physical actuation. No pure software/dashboard/chatbot/AI-only entries.",
+    brief:
+      "Bring your own hardware crisis. Any sense → decide → act system with real physical response.",
+    scenario:
+      "Not every crisis has been named yet. Somewhere, something is about to fail, and it doesn't match any protocol on file. This is your chance to define the threat — and the system that survives it.",
+    engineeringProblem:
+      "Bring your own hardware crisis. Any sense → decide → act system — embedded, IoT, robotics, power, RF, control systems — as long as it demonstrates a real physical response to a real physical problem.",
+    constraint:
+      "Must still follow the core rule of the event — a sensor, a decision, and a physical actuation. No pure software/dashboard/chatbot/AI-only entries.",
     exampleIdeas: [
       "Custom Robotics & Actuated Mechanisms",
       "Embedded IoT Sensor & Feedback Control Loop",
-      "Hardware Power / RF / Autonomous Reactive System"
+      "Hardware Power / RF / Autonomous Reactive System",
     ],
     stack: [],
   },
@@ -132,7 +150,12 @@ export const STATS = [
   { label: "PRIZE CACHE", value: "₹22K INR", val: "₹22K INR", desc: "Top 3 Squads Rewarded" },
   { label: "SPRINT DURATION", value: "5 HOURS", val: "5 HOURS", desc: "High-Intensity Build" },
   { label: "THREAT SECTORS", value: "5 TRACKS", val: "5 TRACKS", desc: "Open & Focused Domains" },
-  { label: "CLEARANCE RATE", value: "OPEN TO ALL", val: "OPEN TO ALL", desc: "All Colleges & Streams" },
+  {
+    label: "CLEARANCE RATE",
+    value: "OPEN TO ALL",
+    val: "OPEN TO ALL",
+    desc: "All Colleges & Streams",
+  },
 ];
 
 export type Stage = "prep" | "hacking" | "pitch";
@@ -184,8 +207,7 @@ export const TIMELINE: TimelineEvent[] = [
     title: "Project Freeze & Code Lockdown",
     location: "Jaya Auditorium",
     stage: "hacking",
-    description:
-      "Stop work command. Prototypes and presentations locked for jury evaluation.",
+    description: "Stop work command. Prototypes and presentations locked for jury evaluation.",
     status: "CODE LOCKDOWN",
   },
   {

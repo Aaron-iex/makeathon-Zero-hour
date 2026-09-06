@@ -76,20 +76,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5" },
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5",
+      },
       { name: "theme-color", content: "#1a1a1a" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { title: "Project Zeroth Hour — ECE Makeathon" },
       {
         name: "description",
-        content: "Jaya Engineering College Department of ECE presents Makeathon: Project Zeroth Hour. 5-hour planetary defence makeathon.",
+        content:
+          "Jaya Engineering College Department of ECE presents Makeathon: Project Zeroth Hour. 5-hour planetary defence makeathon.",
       },
       { name: "author", content: "Project Zeroth Hour" },
       { property: "og:title", content: "Project Zeroth Hour — ECE Makeathon" },
       {
         property: "og:description",
-        content: "Jaya Engineering College Department of ECE presents Makeathon: Project Zeroth Hour. 5-hour planetary defence makeathon.",
+        content:
+          "Jaya Engineering College Department of ECE presents Makeathon: Project Zeroth Hour. 5-hour planetary defence makeathon.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

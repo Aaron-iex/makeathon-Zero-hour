@@ -3,7 +3,11 @@ import { createPortal } from "react-dom";
 import { CheckCircle2, Copy, Flame, ShieldCheck, X, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TRACKS } from "@/data/zeroth";
-import { submitRegistrationData, BACKUP_GOOGLE_FORM_URL, type SubmissionResult } from "@/lib/registrations";
+import {
+  submitRegistrationData,
+  BACKUP_GOOGLE_FORM_URL,
+  type SubmissionResult,
+} from "@/lib/registrations";
 import { loadState, saveState, clearState, debounce, STORAGE_KEYS } from "@/lib/state-persistence";
 
 type Props = {
@@ -35,8 +39,9 @@ const DEFAULT_FORM: FormData = {
 };
 
 const FIELD =
-  "w-full border border-border bg-input/80 px-3 py-2.5 text-[16px] sm:text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-none appearance-none";
-const LABEL = "font-mono-tech text-[10px] tracking-[0.18em] text-muted-foreground uppercase block mb-1";
+  "w-full border border-border bg-input/80 px-3 py-2.5 text-[16px] sm:text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/30 rounded-none appearance-none font-mono-tech text-[11px] tracking-[0.1em] uppercase";
+const LABEL =
+  "font-mono-tech text-[11px] tracking-[0.18em] text-muted-foreground uppercase block mb-1";
 
 export function RegisterDialog({ open, onClose, initialTrack }: Props) {
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
@@ -57,7 +62,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
       saveState(STORAGE_KEYS.REGISTRATION_DRAFT, data);
       setShowSavedIndicator(true);
       setTimeout(() => setShowSavedIndicator(false), 1800);
-    }, 1000)
+    }, 1000),
   );
 
   // On dialog opening: check for draft and handle history state
@@ -214,7 +219,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 </div>
 
                 <div className="flex items-center justify-center gap-2 border border-primary/40 bg-background/80 px-3 py-2 font-mono-tech text-sm sm:text-base text-primary">
-                  <span>{submission.id}</span>
+                  <span className="font-mono-tech text-terminal-green text-sm tracking-wider">
+                    [ CLEARANCE GRANTED // ZH-{submission.id} ]
+                  </span>
                   <button
                     onClick={copy}
                     className="ml-2 text-muted-foreground hover:text-primary transition-colors touch-manipulation"
@@ -230,16 +237,32 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 )}
 
                 <div className="border border-border/80 bg-card/60 p-3 text-left font-mono-tech text-[10px] sm:text-xs text-muted-foreground space-y-1">
-                  <p><span className="text-foreground font-bold">Team:</span> {submission.teamName}</p>
-                  <p><span className="text-foreground font-bold">Leader:</span> {submission.leaderName} ({submission.phone})</p>
-                  <p><span className="text-foreground font-bold">Institution:</span> {submission.institution}</p>
-                  <p><span className="text-foreground font-bold">Front:</span> {submission.track}</p>
-                  <p><span className="text-foreground font-bold">Squad size:</span> {submission.teamSize} operators</p>
+                  <p>
+                    <span className="text-foreground font-bold">Team:</span> {submission.teamName}
+                  </p>
+                  <p>
+                    <span className="text-foreground font-bold">Leader:</span>{" "}
+                    {submission.leaderName} ({submission.phone})
+                  </p>
+                  <p>
+                    <span className="text-foreground font-bold">Institution:</span>{" "}
+                    {submission.institution}
+                  </p>
+                  <p>
+                    <span className="text-foreground font-bold">Front:</span> {submission.track}
+                  </p>
+                  <p>
+                    <span className="text-foreground font-bold">Squad size:</span>{" "}
+                    {submission.teamSize} operators
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 border border-accent/40 bg-accent/10 p-2.5 text-left font-mono-tech text-[10px] text-accent">
                   <ShieldCheck className="size-4 shrink-0" />
-                  <span>Bring physical hardware, college IDs, and components on Sept 23. Reporting time: 08:30 IST.</span>
+                  <span>
+                    Bring physical hardware, college IDs, and components on Sept 23. Reporting time:
+                    08:30 IST.
+                  </span>
                 </div>
 
                 <Button
@@ -258,7 +281,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
               <form onSubmit={submit} className="p-3.5 sm:p-6 space-y-3.5 sm:space-y-4">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={LABEL}>Squad Designation *</label>
+                    <label className={LABEL}>
+                      Squad Designation <span className="text-primary ml-0.5">*</span>
+                    </label>
                     <input
                       required
                       className={FIELD}
@@ -268,7 +293,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                     />
                   </div>
                   <div>
-                    <label className={LABEL}>Squad Leader *</label>
+                    <label className={LABEL}>
+                      Squad Leader <span className="text-primary ml-0.5">*</span>
+                    </label>
                     <input
                       required
                       className={FIELD}
@@ -281,7 +308,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={LABEL}>Comms Link (Email) *</label>
+                    <label className={LABEL}>
+                      Comms Link (Email) <span className="text-primary ml-0.5">*</span>
+                    </label>
                     <input
                       required
                       type="email"
@@ -292,7 +321,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                     />
                   </div>
                   <div>
-                    <label className={LABEL}>Emergency Comms (Phone) *</label>
+                    <label className={LABEL}>
+                      Emergency Comms (Phone) <span className="text-primary ml-0.5">*</span>
+                    </label>
                     <input
                       required
                       type="tel"
@@ -306,7 +337,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={LABEL}>College / Base Institution *</label>
+                    <label className={LABEL}>
+                      College / Base Institution <span className="text-primary ml-0.5">*</span>
+                    </label>
                     <input
                       required
                       className={FIELD}
@@ -316,14 +349,16 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                     />
                   </div>
                   <div>
-                    <label className={LABEL}>Target Defence Sector *</label>
-                    <select
-                      className={FIELD}
-                      value={form.track}
-                      onChange={set("track")}
-                    >
+                    <label className={LABEL}>
+                      Target Defence Sector <span className="text-primary ml-0.5">*</span>
+                    </label>
+                    <select className={FIELD} value={form.track} onChange={set("track")}>
                       {TRACKS.map((t) => (
-                        <option key={t.id} value={t.title} className="bg-background text-foreground">
+                        <option
+                          key={t.id}
+                          value={t.title}
+                          className="bg-background text-foreground"
+                        >
                           [{t.code}] {t.title}
                         </option>
                       ))}
@@ -332,13 +367,15 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 </div>
 
                 <div>
-                  <label className={LABEL}>Squad Size *</label>
+                  <label className={LABEL}>
+                    Squad Size <span className="text-primary ml-0.5">*</span>
+                  </label>
                   <div className="grid grid-cols-4 gap-2">
                     {["1", "2", "3", "4"].map((sz) => (
                       <button
                         key={sz}
                         type="button"
-                        onClick={() => set("teamSize")({ target: { value: sz } } as any)}
+                        onClick={() => set("teamSize")({ target: { value: sz } })}
                         className={`border py-2 text-center font-mono-tech text-xs tracking-wider transition-colors touch-manipulation min-h-[44px] ${
                           form.teamSize === sz
                             ? "border-primary bg-primary/20 text-primary font-bold"
@@ -364,7 +401,9 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
                 <div className="border-t border-border pt-3 sm:pt-4 text-left">
                   <p className="font-mono-tech text-[10px] sm:text-[11px] text-muted-foreground">
-                    Fee: <span className="text-accent font-bold">₹200 / squad</span> · Food, high-speed Wi-Fi, mentorship included. Payment collected at check-in counter on Sept 23.
+                    Fee: <span className="text-accent font-bold">₹200 / squad</span> · Food,
+                    high-speed Wi-Fi, mentorship included. Payment collected at check-in counter on
+                    Sept 23.
                   </p>
                 </div>
 
@@ -384,6 +423,6 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

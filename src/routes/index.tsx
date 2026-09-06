@@ -10,6 +10,7 @@ import { SiteFooter } from "@/components/zeroth/SiteFooter";
 import { Sponsors } from "@/components/zeroth/Sponsors";
 import { RegisterDialog } from "@/components/zeroth/RegisterDialog";
 import { SabotageQuiz } from "@/components/zeroth/SabotageQuiz";
+import { FilmGrain } from "@/components/zeroth/FilmGrain";
 import { loadState, saveState, STORAGE_KEYS } from "@/lib/state-persistence";
 
 const TITLE = "Zeroth Hour — 5-Hour Planetary Defence Makeathon";
@@ -48,7 +49,7 @@ function Index() {
 
   const [tab, setTabRaw] = useState<Tab>(getTabFromHash);
   const scrollPositionsRef = useRef<Record<Tab, number>>(
-    loadState<Record<Tab, number>>(STORAGE_KEYS.TAB_SCROLLS, { home: 0, events: 0, about: 0 })
+    loadState<Record<Tab, number>>(STORAGE_KEYS.TAB_SCROLLS, { home: 0, events: 0, about: 0 }),
   );
 
   /** Save current scroll position before switching tabs */
@@ -76,7 +77,7 @@ function Index() {
         window.scrollTo({ top: targetScroll, behavior: "smooth" });
       }, 50);
     },
-    [tab, saveCurrentScroll]
+    [tab, saveCurrentScroll],
   );
 
   /** Listen for browser Back/Forward (popstate) to synchronize active tab */
@@ -89,7 +90,7 @@ function Index() {
         return;
       }
 
-      const nextTab = (hash === "events" || hash === "about") ? hash : "home";
+      const nextTab = hash === "events" || hash === "about" ? hash : "home";
       // ONLY switch tabs and restore scroll if the tab actually changed
       if (nextTab !== tab) {
         saveCurrentScroll(tab);
@@ -142,6 +143,7 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-background">
+      <FilmGrain />
       <EmergencyTicker />
       <SiteNav onRegister={() => openRegister()} activeTab={tab} onTabChange={setTab} />
       <main>
@@ -158,6 +160,7 @@ function Index() {
         {tab === "events" && (
           <>
             <Roadmap onRegister={() => openRegister()} />
+            <Sectors onRegister={openRegister} />
             <SabotageQuiz />
           </>
         )}

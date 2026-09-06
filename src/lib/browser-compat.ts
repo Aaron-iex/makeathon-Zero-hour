@@ -68,9 +68,7 @@ class BrowserCompat {
   /** Check user preference for reduced motion */
   prefersReducedMotion(): boolean {
     if (typeof window === "undefined") return false;
-    return !!(
-      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    );
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
 
   /** Safe requestAnimationFrame with setTimeout fallback */
