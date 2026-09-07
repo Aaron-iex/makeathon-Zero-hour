@@ -48,7 +48,7 @@ export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
 
-const DEFAULT_ADMIN_PIN = "ZH2026";
+const DEFAULT_ADMIN_PIN = "Zero@123";
 const PIN_STORAGE_KEY = "zeroth_admin_pin";
 const AUTH_SESSION_KEY = "zeroth_admin_auth";
 
