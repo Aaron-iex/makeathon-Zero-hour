@@ -123,7 +123,7 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
             <span className="h-px w-6 bg-primary" />
           </div>
 
-          <h2 className="font-display text-3xl font-black uppercase sm:text-5xl leading-tight">
+          <h2 className="font-display text-[clamp(1.75rem,5vw,3rem)] font-black uppercase leading-tight">
             Engineering the <span className="text-alert-gradient">last hour</span>
           </h2>
 
@@ -187,10 +187,10 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
             // TELEMETRY DATA STREAM
           </div>
           <motion.dl
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             className="grid grid-cols-2 gap-3.5 sm:gap-4"
           >
             {STATS.map((s) => (
@@ -236,7 +236,7 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
               <article className="panel-tactical p-6 border border-primary/40">
                 <div className="flex items-center justify-between">
                   {HOD.image ? (
-                    <div className="relative size-20 sm:size-24 overflow-hidden rounded-md border-2 border-primary/60 bg-black/40 shadow-[0_0_12px_rgba(224,76,17,0.3)]">
+                    <div className="relative size-20 sm:size-24 overflow-hidden border border-primary/70 bg-card/80">
                       <img
                         src={HOD.image}
                         alt={HOD.name}
@@ -336,7 +336,7 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
                   <div>
                     <div className="flex items-start justify-between">
                       {m.image ? (
-                        <div className="relative size-20 sm:size-24 overflow-hidden rounded-md border-2 border-primary/60 bg-black/40 shadow-[0_0_12px_rgba(224,76,17,0.3)]">
+                        <div className="relative size-20 sm:size-24 overflow-hidden border border-primary/70 bg-card/80">
                           <img
                             src={m.image}
                             alt={m.name}
@@ -382,7 +382,7 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
                         href={`tel:${m.phone.replace(/[^0-9+]/g, "")}`}
                         className="inline-flex items-center gap-2 font-mono-tech text-sm font-bold text-accent transition-colors hover:text-primary min-h-[44px] touch-manipulation"
                       >
-                        <Phone className="size-3.5 text-primary" />
+                        <Phone className="size-3.5 text-primary shrink-0" />
                         {m.phone}
                       </a>
                     </div>
@@ -404,7 +404,7 @@ export function Intel({ preview, onExpand }: { preview?: boolean; onExpand?: () 
             viewport={{ once: true }}
             className="mt-16 grid gap-8 lg:grid-cols-[0.8fr_1.2fr]"
           >
-            <h3 className="font-display text-2xl font-black uppercase">
+            <h3 className="font-display text-[clamp(1.25rem,4vw,2rem)] font-black uppercase">
               Frequently intercepted <span className="text-accent">questions</span>
             </h3>
             <div className="divide-y divide-border border-y border-border">

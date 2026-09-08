@@ -155,7 +155,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md"
+      className="fixed inset-0 z-50 bg-background/85 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label="Squad enrollment protocol"
@@ -172,7 +172,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                     DEFCON 1 // CLEARANCE REQUEST
                   </span>
                   {showSavedIndicator && (
-                    <span className="inline-flex items-center gap-1 font-mono-tech text-[9px] text-emerald-400 font-bold animate-pulse">
+                    <span className="inline-flex items-center gap-1 font-mono-tech text-[9px] text-terminal-green font-bold animate-pulse">
                       <Save className="size-3" /> Draft saved
                     </span>
                   )}
@@ -231,7 +231,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                   </button>
                 </div>
                 {copied && (
-                  <p className="font-mono-tech text-[10px] text-emerald-400">
+                  <p className="font-mono-tech text-[10px] text-terminal-green">
                     Copied to tactical clipboard
                   </p>
                 )}

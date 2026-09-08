@@ -597,7 +597,7 @@ export function AdminDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={checkInFilter}
-              onChange={(e) => setCheckInFilter(e.target.value as any)}
+              onChange={(e) => setCheckInFilter(e.target.value as "all" | "checked" | "unchecked")}
               className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-neutral-300 outline-none focus:border-primary"
             >
               <option value="all">All Check-in Status</option>
@@ -607,7 +607,7 @@ export function AdminDashboard() {
 
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "team" | "id")}
               className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-neutral-300 outline-none focus:border-primary"
             >
               <option value="newest">Sort: Newest First</option>

@@ -229,7 +229,7 @@ export async function fetchRemoteRegistrations(
 
     const json = await res.json();
     if (Array.isArray(json)) {
-      const parsed: Registration[] = json.map((item: any) => ({
+      const parsed: Registration[] = json.map((item: Record<string, unknown>) => ({
         id: String(
           item.id ||
             item.ID ||
@@ -316,7 +316,7 @@ export async function submitRegistrationData(
 
   // 3. Dual-Sync: Submit simultaneously to Google Sheet Webhook AND Dual-Sync Google Form
   const sheetsUrl = getGoogleSheetsWebhookUrl();
-  const promises: Promise<any>[] = [];
+  const promises: Promise<unknown>[] = [];
 
   // A. Submit to Dual-Sync Google Form (https://forms.gle/2EKyiYHmae8oWEtf7)
   promises.push(submitDirectlyToGoogleForm(formData));

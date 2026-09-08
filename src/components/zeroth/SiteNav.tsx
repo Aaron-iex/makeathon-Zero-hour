@@ -123,12 +123,12 @@ export function SiteNav({
             variant="alert"
             size="sm"
             onClick={onRegister}
-            className="font-mono-tech text-[10px] tracking-wider px-2.5 py-1"
+            className="font-mono-tech text-[10px] tracking-wider px-3 min-h-[44px] touch-manipulation"
           >
             REGISTER
           </Button>
           <button
-            className="grid size-10 place-items-center border border-border text-foreground clip-tactical touch-manipulation"
+            className="grid size-11 place-items-center border border-border text-foreground clip-tactical touch-manipulation min-h-[44px] min-w-[44px] cursor-pointer"
             onClick={() => setOpen((v) => !v)}
             aria-label={open ? "Close menu" : "Open menu"}
           >

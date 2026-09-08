@@ -96,14 +96,14 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t border-border px-4 py-5 font-mono-tech text-[10px] tracking-[0.2em] text-muted-foreground flex flex-col md:flex-row items-center justify-between gap-3 max-w-7xl mx-auto">
+      <div className="border-t border-border px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] font-mono-tech text-[10px] tracking-[0.2em] text-muted-foreground flex flex-col md:flex-row items-center justify-between gap-3 max-w-7xl mx-auto">
         <div className="flex flex-wrap items-center justify-center gap-3.5 text-[9px] uppercase tracking-wider">
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <span className="size-1.5 rounded-full bg-terminal-green animate-pulse" />
             CPU: NOMINAL
           </span>
           <span className="flex items-center gap-1.5 text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-terminal-green" />
+            <span className="size-1.5 rounded-full bg-radar-cyan" />
             NET: ARMED
           </span>
           <span className="flex items-center gap-1.5 text-accent font-bold">

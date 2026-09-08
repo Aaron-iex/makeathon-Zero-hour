@@ -1,24 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import {
-  Calendar,
-  ChevronRight,
-  Clock,
-  Flame,
-  Crosshair,
-  Radio,
-  Shield,
-  AlertTriangle,
-} from "lucide-react";
+import { AlertTriangle, Calendar, ChevronRight, Clock, Flame, Radio, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import heroImage from "@/assets/hero-cataclysm.jpg";
 import { browserCompat } from "@/lib/browser-compat";
-import { loadState, saveState, STORAGE_KEYS } from "@/lib/state-persistence";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-gsap.registerPlugin(ScrollTrigger);
 
 // openmotion.design inspired transitions
 const staggerContainer = {
@@ -26,85 +13,26 @@ const staggerContainer = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.15,
-      delayChildren: 0.2,
-      ease: [0.25, 0.1, 0.25, 1],
+      staggerChildren: 0.12,
+      delayChildren: 0.15,
+      ease: [0.16, 1, 0.3, 1],
     },
   },
 };
 
-const fadeUpBlur = {
-  hidden: { opacity: 0, y: 30, filter: "blur(12px)" },
+const revealInstrument = {
+  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
-    filter: "blur(0px)",
-    transition: { type: "spring", stiffness: 200, damping: 20 },
+    transition: {
+      duration: 0.35,
+      ease: [0.16, 1, 0.3, 1],
+    },
   },
 };
 
-/* ─── Cinematic Opening Sequence (Mobile & Desktop Responsive) ─── */
-const DISASTER_SEQUENCE = [
-  { text: "⚠ SEISMIC BREACH DETECTED", color: "text-red-500" },
-  { text: "◈ CORE MELTDOWN IMMINENT", color: "text-orange-400" },
-  { text: "◉ RF BLACKOUT — ALL BANDS", color: "text-yellow-400" },
-  { text: "△ GLOBAL COMMS FAILURE", color: "text-red-400" },
-  { text: "▣ INITIATING ZEROTH HOUR PROTOCOL", color: "text-primary font-bold" },
-];
-
-function CinematicIntro({ onComplete }: { onComplete: () => void }) {
-  const [phase, setPhase] = useState(0); // 0-4 = disaster lines, 5 = fade out
-  const [opacity, setOpacity] = useState(1);
-
-  useEffect(() => {
-    if (phase < DISASTER_SEQUENCE.length) {
-      const id = setTimeout(() => setPhase((p) => p + 1), 600);
-      return () => clearTimeout(id);
-    } else {
-      setOpacity(0);
-      const id = setTimeout(onComplete, 700);
-      return () => clearTimeout(id);
-    }
-  }, [phase, onComplete]);
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md px-3 py-6 pointer-events-none transition-opacity duration-700 overflow-hidden"
-      style={{ opacity }}
-    >
-      {/* Scanline & Grid Overlays */}
-      <div className="absolute inset-0 scanlines opacity-60 pointer-events-none" />
-      <div className="absolute inset-0 grid-tactical opacity-15 pointer-events-none" />
-
-      {/* Central Warning Icon */}
-      <div className="relative mb-4 sm:mb-6 shrink-0">
-        <AlertTriangle className="size-10 sm:size-14 text-primary animate-pulse" />
-        <div className="absolute inset-0 animate-ping">
-          <AlertTriangle className="size-10 sm:size-14 text-primary opacity-30" />
-        </div>
-      </div>
-
-      {/* Responsive Disaster Sequence Lines */}
-      <div className="flex flex-col items-center gap-2 sm:gap-3 w-full max-w-[92vw] sm:max-w-xl text-center">
-        {DISASTER_SEQUENCE.map((item, i) => (
-          <div
-            key={i}
-            className={`font-mono-tech text-[11px] sm:text-xs md:text-sm tracking-[0.12em] sm:tracking-[0.2em] uppercase transition-all duration-300 ${
-              i < phase ? `${item.color} opacity-100 translate-y-0` : "opacity-0 translate-y-3"
-            }`}
-          >
-            {item.text}
-          </div>
-        ))}
-      </div>
-
-      {/* Bottom Pulse Bar */}
-      {phase >= 3 && <div className="absolute bottom-0 inset-x-0 h-1 bg-primary animate-pulse" />}
-    </div>
-  );
-}
-
-/* ─── Floating Ember Particle Canvas ─── */
+/* ─── Floating Ember Particle Canvas (GPU Optimized + Offscreen Pause) ─── */
 function EmberCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -119,12 +47,19 @@ function EmberCanvas() {
     }
 
     let rafId: number;
+    let isVisible = true;
+
     const resize = () => {
       canvas.width = canvas.offsetWidth;
       canvas.height = canvas.offsetHeight;
     };
     resize();
     window.addEventListener("resize", resize, { passive: true });
+
+    const observer = new IntersectionObserver(([entry]) => {
+      isVisible = !!entry?.isIntersecting;
+    });
+    observer.observe(canvas);
 
     type Particle = {
       x: number;
@@ -138,42 +73,47 @@ function EmberCanvas() {
 
     const isMobile = canvas.width < 640;
     const isVerySmall = canvas.width < 375;
-    const count = isVerySmall ? 10 : isMobile ? 16 : 40;
+    const count = isVerySmall ? 8 : isMobile ? 12 : 24;
 
     const particles: Particle[] = Array.from({ length: count }, () => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.35,
-      vy: -(Math.random() * 0.6 + 0.12),
-      r: Math.random() * 1.6 + 0.5,
-      alpha: Math.random() * 0.5 + 0.2,
+      vx: (Math.random() - 0.5) * 0.2,
+      vy: -(Math.random() * 0.2 + 0.05),
+      r: Math.random() * 1.5 + 0.5,
+      alpha: Math.random() * 0.4 + 0.15,
       hue: Math.random() > 0.4 ? 20 : 40,
     }));
 
     const draw = () => {
+      if (!isVisible || document.hidden) {
+        rafId = requestAnimationFrame(draw);
+        return;
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       particles.forEach((p) => {
         p.x += p.vx;
         p.y += p.vy;
         p.alpha += (Math.random() - 0.5) * 0.015;
-        p.alpha = Math.max(0.03, Math.min(0.6, p.alpha));
+        p.alpha = Math.max(0.03, Math.min(0.5, p.alpha));
 
         if (p.y < -6) {
           p.y = canvas.height + 6;
           p.x = Math.random() * canvas.width;
-          p.alpha = 0.4;
+          p.alpha = 0.35;
         }
 
         ctx.save();
         ctx.globalAlpha = p.alpha;
-        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3.5);
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
         g.addColorStop(0, `hsl(${p.hue}, 100%, 75%)`);
-        g.addColorStop(0.4, `hsla(${p.hue}, 100%, 50%, 0.3)`);
+        g.addColorStop(0.4, `hsla(${p.hue}, 100%, 50%, 0.25)`);
         g.addColorStop(1, "transparent");
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 3.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       });
@@ -185,6 +125,7 @@ function EmberCanvas() {
 
     return () => {
       cancelAnimationFrame(rafId);
+      observer.disconnect();
       window.removeEventListener("resize", resize);
     };
   }, []);
@@ -268,32 +209,121 @@ function RadarSweep() {
 /* ─── Split-Flap Countdown Digit ─── */
 function FlipDigit({ value, label }: { value: string; label: string }) {
   return (
-    <div className="flex flex-col items-center gap-0.5">
+    <div className="flex flex-col items-center gap-0.5 shrink-0">
       <div className="relative flex gap-[2px]">
         {value.split("").map((digit, i) => (
           <div
             key={i}
-            className="relative flex h-10 w-7 sm:h-14 sm:w-10 items-center justify-center border border-primary/50 bg-black/90 font-display text-sm sm:text-2xl font-black text-foreground shadow-md"
+            className="relative flex h-9 w-6 sm:h-14 sm:w-10 items-center justify-center border border-primary/50 bg-card/90 font-display text-xs sm:text-2xl font-black text-foreground tabular-nums shadow-sm"
           >
             <span className="relative z-10">{digit}</span>
-            <div className="absolute inset-x-0 top-1/2 h-[1px] bg-primary/40" />
+            <div className="absolute inset-x-0 top-1/2 h-px bg-primary/30 pointer-events-none" />
           </div>
         ))}
       </div>
-      <span className="font-mono-tech text-[8px] sm:text-[10px] uppercase text-muted-foreground tracking-widest">
+      <span className="font-mono-tech text-[8px] sm:text-[9px] uppercase text-muted-foreground tracking-[0.18em]">
         {label}
       </span>
     </div>
   );
 }
 
+/* ─── Cinematic Opening Sequence (Mobile & Desktop Responsive) ─── */
+const DISASTER_SEQUENCE = [
+  { text: "⚠ SEISMIC BREACH DETECTED", color: "text-primary" },
+  { text: "◈ CORE MELTDOWN IMMINENT", color: "text-accent" },
+  { text: "◉ RF BLACKOUT — ALL BANDS", color: "text-radar-cyan" },
+  { text: "△ GLOBAL COMMS FAILURE", color: "text-primary" },
+  { text: "▣ INITIATING ZEROTH HOUR PROTOCOL", color: "text-alert-gradient font-bold" },
+];
+
+function CinematicIntro({ onComplete }: { onComplete: () => void }) {
+  const [phase, setPhase] = useState(0); // 0-4 = disaster lines, 5 = fade out
+  const [opacity, setOpacity] = useState(1);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      onComplete();
+      return;
+    }
+
+    if (phase < DISASTER_SEQUENCE.length) {
+      const id = setTimeout(() => setPhase((p) => p + 1), 550);
+      return () => clearTimeout(id);
+    } else {
+      // start fade out
+      setOpacity(0);
+      const id = setTimeout(onComplete, 700);
+      return () => clearTimeout(id);
+    }
+  }, [phase, onComplete]);
+
+  return (
+    <div
+      onClick={() => {
+        setOpacity(0);
+        setTimeout(onComplete, 350);
+      }}
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-background transition-opacity duration-700 px-3 py-6 overflow-hidden select-none cursor-pointer ${
+        opacity === 0 ? "pointer-events-none" : "pointer-events-auto"
+      }`}
+      style={{ opacity }}
+      role="status"
+      aria-label="Disaster alert sequence loading"
+    >
+      {/* Scanline & Grid Overlays */}
+      <div className="absolute inset-0 scanlines opacity-60 pointer-events-none" />
+      <div className="absolute inset-0 grid-tactical opacity-15 pointer-events-none" />
+
+      {/* Central Warning Icon */}
+      <div className="relative mb-4 sm:mb-6 shrink-0">
+        <AlertTriangle className="size-10 sm:size-14 text-primary animate-pulse" />
+        <div className="absolute inset-0 animate-ping">
+          <AlertTriangle className="size-10 sm:size-14 text-primary opacity-30" />
+        </div>
+      </div>
+
+      {/* Responsive Disaster Sequence Lines */}
+      <div className="flex flex-col items-center gap-2 sm:gap-3 w-full max-w-[92vw] sm:max-w-xl text-center">
+        {DISASTER_SEQUENCE.map((item, i) => (
+          <div
+            key={i}
+            className={`font-mono-tech text-[11px] sm:text-xs md:text-sm tracking-[0.12em] sm:tracking-[0.2em] uppercase transition-all duration-300 ${
+              i < phase
+                ? `${item.color} opacity-100 translate-y-0 font-bold`
+                : "opacity-0 translate-y-3"
+            }`}
+          >
+            {item.text}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom Pulse Bar */}
+      {phase >= 3 && <div className="absolute bottom-0 inset-x-0 h-1 bg-primary animate-pulse" />}
+    </div>
+  );
+}
+
 /* ─── HERO MAIN ─── */
+let hasPlayedIntroThisAppLaunch = false;
+
 export function Hero({ onRegister }: { onRegister: () => void }) {
   const sectionRef = useRef<HTMLElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const [clock, setClock] = useState<string | null>(null);
   const [cd, setCd] = useState({ d: "00", h: "00", m: "00", s: "00" });
+
+  const [introDone, setIntroComplete] = useState(() => hasPlayedIntroThisAppLaunch);
+
+  const handleIntroDone = useCallback(() => {
+    hasPlayedIntroThisAppLaunch = true;
+    setIntroComplete(true);
+  }, []);
 
   useEffect(() => {
     const tick = () => setClock(new Date().toUTCString().slice(17, 25) + " UTC");
@@ -321,38 +351,23 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
   useGSAP(
     () => {
-      if (!sectionRef.current || !imgRef.current) return;
+      if (!imgRef.current) return;
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-      // Image scale-fade: grows from 0.92 to 1.0 as it enters
+      // Smooth entrance animation without continuous scroll scrub overhead
       gsap.fromTo(
         imgRef.current,
-        { scale: 0.92, opacity: 0.7 },
+        { scale: 0.96, opacity: 0.6 },
         {
           scale: 1,
-          opacity: 0.9,
+          opacity: 0.75,
+          duration: 1.2,
           ease: "power2.out",
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            start: "top bottom",
-            end: "bottom top",
-            scrub: 1.5,
-          },
         },
       );
     },
     { scope: sectionRef },
   );
-
-  /* ── Intro sequence played persistence ── */
-  const [introDone, setIntroComplete] = useState(() =>
-    loadState<boolean>(STORAGE_KEYS.INTRO_PLAYED, false),
-  );
-
-  const handleIntroDone = useCallback(() => {
-    saveState(STORAGE_KEYS.INTRO_PLAYED, true);
-    setIntroComplete(true);
-  }, []);
 
   return (
     <>
@@ -381,7 +396,7 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
         >
           {/* ── DEFCON Badge ── */}
           <motion.div
-            variants={fadeUpBlur}
+            variants={revealInstrument}
             className="inline-flex items-center gap-2 border border-primary/60 bg-primary/15 px-3 py-1 sm:px-4 sm:py-1.5 clip-tactical mb-2.5 sm:mb-3"
           >
             <span className="relative flex size-2">
@@ -395,14 +410,14 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </motion.div>
 
           {/* ── College Header (Responsive Mobile Layout) ── */}
-          <motion.div variants={fadeUpBlur} className="w-full max-w-5xl px-1 sm:px-4">
+          <motion.div variants={revealInstrument} className="w-full max-w-5xl px-1 sm:px-4">
             <div className="flex flex-row items-center justify-between sm:justify-center gap-2 sm:gap-6">
               <div className="shrink-0">
-                <div className="size-12 sm:size-24 md:size-28 flex items-center justify-center transition-transform duration-300 hover:scale-110 drop-shadow-[0_0_15px_rgba(255,200,0,0.4)] animate-float">
+                <div className="size-12 sm:size-24 md:size-28 flex items-center justify-center filter drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
                   <img
                     src="/images/jec-emblem.png?v=20260826"
                     alt="Jaya Educational Trust Emblem"
-                    className="size-full object-contain filter drop-shadow-md"
+                    className="size-full object-contain"
                   />
                 </div>
               </div>
@@ -420,14 +435,11 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
               </div>
 
               <div className="shrink-0">
-                <div
-                  className="size-12 sm:size-24 md:size-28 flex items-center justify-center transition-transform duration-300 hover:scale-110 drop-shadow-[0_0_15px_rgba(255,200,0,0.4)] animate-float"
-                  style={{ animationDelay: "1s" }}
-                >
+                <div className="size-12 sm:size-24 md:size-28 flex items-center justify-center filter drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
                   <img
                     src="/images/jec-31years.png?v=20260826"
                     alt="31 Years of Excellence"
-                    className="size-full object-contain filter drop-shadow-md"
+                    className="size-full object-contain"
                   />
                 </div>
               </div>
@@ -443,29 +455,28 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
             </div>
           </motion.div>
 
-          {/* ── Main Event Title ── */}
+          {/* ── Main Event Title (Preserving clear line of sight to boy) ── */}
           <div className="relative mt-2 sm:mt-4">
             <RadarSweep />
             <div className="px-2 py-1 sm:px-8 sm:py-4">
-              <motion.h1 variants={fadeUpBlur} className="font-display uppercase">
+              <motion.h1 variants={revealInstrument} className="font-display uppercase">
                 <span
-                  className="block text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-black text-foreground tracking-tighter"
+                  className="block text-[clamp(2.25rem,8vw,6rem)] font-black text-foreground tracking-tighter leading-none"
                   style={{
-                    textShadow: "0 0 30px rgba(255,255,255,0.2), 0 0 60px rgba(224,76,17,0.15)",
+                    textShadow: "0 0 30px rgba(255,255,255,0.15), 0 0 60px rgba(224,76,17,0.12)",
                   }}
                 >
                   MAKEATHON
                 </span>
-                <span className="mt-1 block text-base sm:text-3xl md:text-4xl lg:text-5xl font-extrabold shimmer-text tracking-wide">
+                <span className="mt-1 block text-[clamp(1.1rem,4.5vw,3rem)] font-black text-alert-gradient tracking-wide leading-tight">
                   PROJECT ZEROTH HOUR
                 </span>
               </motion.h1>
             </div>
-            <Crosshair className="absolute -top-2 -right-2 sm:-top-4 sm:-right-4 size-5 sm:size-8 text-primary/40 animate-float" />
           </div>
 
-          {/* ── Split-Flap Countdown ── */}
-          <motion.div variants={fadeUpBlur} className="mt-16 sm:mt-28 px-2 py-1">
+          {/* ── Split-Flap Countdown (Spaced to keep boy center stage visible) ── */}
+          <motion.div variants={revealInstrument} className="mt-16 sm:mt-28 px-2 py-1">
             <div className="flex items-center gap-1.5 mb-1.5 justify-center">
               <Shield className="size-3 sm:size-3.5 text-primary" />
               <span className="font-mono-tech text-[8px] sm:text-[9px] tracking-[0.2em] text-primary font-bold uppercase">
@@ -474,15 +485,15 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
             </div>
             <div className="flex items-start gap-1 sm:gap-2 justify-center">
               <FlipDigit value={cd.d} label="Days" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+              <span className="font-display text-xs sm:text-lg font-black text-primary/80 mt-1 select-none animate-pulse">
                 :
               </span>
               <FlipDigit value={cd.h} label="Hrs" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+              <span className="font-display text-xs sm:text-lg font-black text-primary/80 mt-1 select-none animate-pulse">
                 :
               </span>
               <FlipDigit value={cd.m} label="Min" />
-              <span className="font-display text-xs sm:text-lg font-black text-primary mt-1 animate-flicker">
+              <span className="font-display text-xs sm:text-lg font-black text-primary/80 mt-1 select-none animate-pulse">
                 :
               </span>
               <FlipDigit value={cd.s} label="Sec" />
@@ -491,15 +502,15 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
           {/* ── Date & Venue (Updated Date: SEPT 23) ── */}
           <motion.div
-            variants={fadeUpBlur}
-            className="mt-3.5 sm:mt-4 flex w-full max-w-md items-center gap-2.5 sm:gap-3 border border-accent/70 bg-black/80 backdrop-blur-md px-3 py-2 sm:px-4 sm:py-2.5 clip-tactical text-left shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
+            variants={revealInstrument}
+            className="mt-3.5 sm:mt-4 flex w-full max-w-md items-center gap-2.5 sm:gap-3 border border-accent/70 bg-card/90 px-3 py-2 sm:px-4 sm:py-2.5 clip-tactical text-left shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
           >
             <Calendar className="size-4 sm:size-5 shrink-0 text-accent" aria-hidden />
-            <div>
-              <p className="font-display text-xs sm:text-sm font-bold uppercase tracking-[0.12em] text-accent">
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-xs sm:text-sm font-bold uppercase tracking-[0.12em] text-accent truncate">
                 SEPT 23 // 5-HOUR MAKEATHON
               </p>
-              <p className="font-mono-tech text-[9px] sm:text-[11px] text-white/90 font-medium">
+              <p className="font-mono-tech text-[9px] sm:text-[11px] text-white/90 font-medium truncate">
                 Venue: Jaya Auditorium · Registration queue open
               </p>
             </div>
@@ -507,14 +518,14 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
           {/* ── CTA Buttons ── */}
           <motion.div
-            variants={fadeUpBlur}
+            variants={revealInstrument}
             className="mt-4 sm:mt-5 flex flex-col gap-2 sm:flex-row w-full sm:w-auto"
           >
             <Button
               variant="alert"
               size="default"
               onClick={onRegister}
-              className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group relative overflow-hidden transition-all duration-300 hover:scale-[1.02]"
+              className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
             >
               <Flame className="size-4" aria-hidden />
               Enlist your squad
@@ -524,7 +535,7 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
               variant="tactical"
               size="default"
               asChild
-              className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group transition-all duration-300 hover:scale-[1.02]"
+              className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group transition-all duration-300 hover:-translate-y-0.5"
             >
               <a href="#roadmap">
                 <Clock className="size-4" aria-hidden />
@@ -533,26 +544,30 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
             </Button>
           </motion.div>
 
-          {/* ── Prize & Fee Info ── */}
+          {/* ── Prize & Fee Info (Tactical Telemetry Pods) ── */}
           <motion.div
-            variants={fadeUpBlur}
+            variants={revealInstrument}
             className="mt-3.5 sm:mt-5 flex w-full max-w-lg flex-row gap-2 sm:gap-3 justify-center"
           >
-            <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-black/85 backdrop-blur-md px-2.5 py-2.5 rounded border border-primary/50">
-              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">
-                PRIZE CACHE
+            <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-card/90 px-3 py-2.5 clip-tactical border border-primary/50 ascii-corners">
+              <p className="font-mono-tech text-[8px] sm:text-[9px] tracking-[0.2em] text-primary font-bold uppercase">
+                [ PRIZE CACHE ]
               </p>
-              <p className="font-display text-lg sm:text-3xl font-black text-foreground">₹22K</p>
-              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">
+              <p className="font-display text-lg sm:text-3xl font-black text-foreground tabular-nums">
+                ₹22K
+              </p>
+              <p className="font-mono-tech text-[8px] sm:text-[9px] text-muted-foreground font-semibold text-center tracking-wider uppercase">
                 + MERCH & CERTS
               </p>
             </div>
-            <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-black/85 backdrop-blur-md px-2.5 py-2.5 rounded border border-accent/50">
-              <p className="font-mono-tech text-[8px] sm:text-[10px] tracking-[0.18em] text-accent font-bold">
-                REGISTRATION
+            <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-card/90 px-3 py-2.5 clip-tactical border border-accent/50 ascii-corners">
+              <p className="font-mono-tech text-[8px] sm:text-[9px] tracking-[0.2em] text-accent font-bold uppercase">
+                [ REGISTRATION ]
               </p>
-              <p className="font-display text-lg sm:text-3xl font-black text-foreground">₹200</p>
-              <p className="font-mono-tech text-[8px] sm:text-[10px] text-white/90 font-semibold text-center">
+              <p className="font-display text-lg sm:text-3xl font-black text-foreground tabular-nums">
+                ₹200
+              </p>
+              <p className="font-mono-tech text-[8px] sm:text-[9px] text-muted-foreground font-semibold text-center tracking-wider uppercase">
                 FOOD & WI-FI INCLUDED
               </p>
             </div>

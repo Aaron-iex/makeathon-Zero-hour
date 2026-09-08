@@ -18,19 +18,19 @@ const FILTERS: { id: Stage | "all"; label: string; icon: typeof Clock }[] = [
 
 const STAGE_COLORS: Record<string, { dot: string; glow: string; border: string }> = {
   prep: {
-    dot: "bg-blue-400",
-    glow: "shadow-[0_0_12px_rgba(96,165,250,0.5)]",
-    border: "border-blue-400/40",
+    dot: "bg-[var(--radar-cyan)]",
+    glow: "shadow-[0_0_8px_rgba(56,182,255,0.4)]",
+    border: "border-[var(--radar-cyan)]/50",
   },
   hacking: {
     dot: "bg-primary",
-    glow: "shadow-[0_0_12px_rgba(224,76,17,0.5)]",
-    border: "border-primary/40",
+    glow: "shadow-[0_0_8px_rgba(224,76,17,0.4)]",
+    border: "border-primary/50",
   },
   pitch: {
     dot: "bg-accent",
-    glow: "shadow-[0_0_12px_rgba(234,179,8,0.5)]",
-    border: "border-accent/40",
+    glow: "shadow-[0_0_8px_rgba(234,179,8,0.4)]",
+    border: "border-accent/50",
   },
 };
 
@@ -56,11 +56,11 @@ export function Roadmap({
       if (!items?.length) return;
       gsap.fromTo(
         items,
-        { y: 40, opacity: 0 },
+        { y: 16, opacity: 0 },
         {
           y: 0,
           opacity: 1,
-          stagger: 0.12,
+          stagger: 0.1,
           ease: "power2.out",
           scrollTrigger: {
             trigger: containerRef.current,
@@ -117,12 +117,12 @@ export function Roadmap({
                 onClick={() => setActive(f.id)}
                 className={`group flex items-center gap-2 px-4 py-2.5 min-h-[44px] clip-tactical font-mono-tech text-[10px] sm:text-[11px] uppercase tracking-[0.18em] transition-all duration-300 touch-manipulation ${
                   active === f.id
-                    ? "bg-accent text-accent-foreground shadow-[var(--glow-warn)] scale-105"
+                    ? "bg-accent text-accent-foreground shadow-[var(--glow-warn)]"
                     : "border border-border bg-card text-muted-foreground hover:text-accent hover:border-accent/40"
                 }`}
               >
                 <f.icon
-                  className={`size-3.5 transition-transform ${active === f.id ? "animate-pulse" : "group-hover:rotate-12"}`}
+                  className={`size-3.5 transition-transform ${active === f.id ? "animate-pulse" : ""}`}
                 />
                 {f.label}
               </button>
@@ -145,9 +145,9 @@ export function Roadmap({
                 {/* Timeline dot */}
                 <div
                   className={`absolute left-[-7px] sm:left-[-8px] top-5 size-4 rounded-full ${colors.dot} ${colors.glow}
-                                transition-all duration-300 group-hover:scale-125 ring-2 ring-background flex items-center justify-center z-10`}
+                                ring-2 ring-background flex items-center justify-center z-10`}
                 >
-                  <div className="size-1.5 rounded-full bg-black/80" />
+                  <div className="size-1.5 rounded-full bg-card" />
                 </div>
 
                 {/* Event Card */}
@@ -259,9 +259,9 @@ export function Roadmap({
               variant="alert"
               size="xl"
               onClick={onRegister}
-              className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:scale-[1.02] transition-all duration-300"
+              className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:-translate-y-0.5 transition-all duration-300"
             >
-              <Flame className="size-4 group-hover:rotate-12 transition-transform" aria-hidden />
+              <Flame className="size-4" aria-hidden />
               Secure squad clearance
             </Button>
           </div>
