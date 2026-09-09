@@ -539,7 +539,7 @@ export function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* KPI Metrics Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
@@ -550,8 +550,21 @@ export function AdminDashboard() {
             <p className="font-display text-2xl sm:text-3xl font-black text-white mt-2">
               {metrics.totalSquads}
             </p>
+            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">Registered Teams</p>
+          </div>
+
+          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                TOTAL MEMBERS
+              </span>
+              <Users className="size-5 text-accent/70" />
+            </div>
+            <p className="font-display text-2xl sm:text-3xl font-black text-accent mt-2">
+              {metrics.totalOperatives}
+            </p>
             <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
-              {metrics.totalOperatives} Total Operatives
+              Participants across squads
             </p>
           </div>
 
@@ -597,7 +610,7 @@ export function AdminDashboard() {
             </p>
           </div>
 
-          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+          <div className="col-span-2 lg:col-span-1 bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
                 CLOUD CACHE & BACKUP
