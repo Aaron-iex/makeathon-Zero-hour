@@ -20,7 +20,7 @@ export default async function handler(request: Request) {
       const { pin } = body;
       const correctPin = process.env.ADMIN_PIN || "Zero@123";
       const token = process.env.ADMIN_SECRET_TOKEN || "zeroth-secure-token-xyz-987";
-      
+
       if (pin === correctPin) {
         return new Response(JSON.stringify({ success: true, token }), {
           status: 200,
@@ -39,7 +39,9 @@ export default async function handler(request: Request) {
         });
       }
     } catch (err) {
-      return new Response(JSON.stringify({ success: false, error: "Bad Request" }), { status: 400 });
+      return new Response(JSON.stringify({ success: false, error: "Bad Request" }), {
+        status: 400,
+      });
     }
   }
 

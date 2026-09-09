@@ -426,7 +426,7 @@ export function AdminDashboard() {
     e.preventDefault();
     setIsLoggingIn(true);
     setPinError(false);
-    
+
     try {
       const res = await fetch("/api/auth", {
         method: "POST",
@@ -434,7 +434,7 @@ export function AdminDashboard() {
         body: JSON.stringify({ pin: pinInput.trim() }),
       });
       const data = await res.json().catch(() => null);
-      
+
       if (res.ok && data?.success && data?.token) {
         setIsAuthenticated(true);
         sessionStorage.setItem(AUTH_SESSION_KEY, "true");

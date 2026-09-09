@@ -127,9 +127,9 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
 
     const res = await fetch("/api/registrations", {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
+        Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action: "updateCheckIn",
@@ -189,9 +189,9 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
 
     const res = await fetch("/api/registrations", {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
+        Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action: "delete",
@@ -257,9 +257,9 @@ export async function syncPaymentToRemote(
 
     const res = await fetch("/api/payments", {
       method: "POST",
-      headers: { 
+      headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${getAuthToken()}`
+        Authorization: `Bearer ${getAuthToken()}`,
       },
       body: JSON.stringify({
         action,
@@ -389,9 +389,9 @@ export async function fetchPaymentStatuses(
       const proxyUrl = `/api/payments?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
-        headers: { 
+        headers: {
           Accept: "application/json",
-          Authorization: `Bearer ${getAuthToken()}`
+          Authorization: `Bearer ${getAuthToken()}`,
         },
         signal: controller.signal,
       });
@@ -512,9 +512,9 @@ export async function fetchRemoteRegistrations(
       const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
-        headers: { 
+        headers: {
           Accept: "application/json",
-          Authorization: `Bearer ${getAuthToken()}`
+          Authorization: `Bearer ${getAuthToken()}`,
         },
         signal: controller.signal,
       });

@@ -10,8 +10,12 @@
 // process.env.PAYMENTS_WEBHOOK_URL
 // process.env.ADMIN_SECRET_TOKEN
 
-const DEFAULT_SHEETS_WEBHOOK_URL = process.env.SHEETS_WEBHOOK_URL || "https://script.google.com/macros/s/AKfycbycYaGTT0ppofK5v8Fg15OCN7_gkKiMo9vMKKc9vtXezbenKvO2RCwA2v_shoTup8e2/exec";
-const DEFAULT_PAYMENTS_WEBHOOK_URL = process.env.PAYMENTS_WEBHOOK_URL || "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
+const DEFAULT_SHEETS_WEBHOOK_URL =
+  process.env.SHEETS_WEBHOOK_URL ||
+  "https://script.google.com/macros/s/AKfycbycYaGTT0ppofK5v8Fg15OCN7_gkKiMo9vMKKc9vtXezbenKvO2RCwA2v_shoTup8e2/exec";
+const DEFAULT_PAYMENTS_WEBHOOK_URL =
+  process.env.PAYMENTS_WEBHOOK_URL ||
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
 const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN || "zeroth-secure-token-xyz-987";
 
 interface CacheRecord {
