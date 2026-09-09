@@ -67,7 +67,10 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
   // On dialog opening: check for draft and handle history state
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setSubmission(null);
+      return;
+    }
 
     // 1. Check for saved draft
     const saved = loadState<FormData | null>(STORAGE_KEYS.REGISTRATION_DRAFT, null);
@@ -220,7 +223,8 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
                 <div className="flex items-center justify-center gap-2 border border-primary/40 bg-background/80 px-3 py-2 font-mono-tech text-sm sm:text-base text-primary">
                   <span className="font-mono-tech text-terminal-green text-sm tracking-wider">
-                    [ CLEARANCE GRANTED // ZH-{submission.id} ]
+                    [ CLEARANCE GRANTED //{" "}
+                    {submission.id.startsWith("ZH-") ? submission.id : `ZH-${submission.id}`} ]
                   </span>
                   <button
                     onClick={copy}
@@ -237,23 +241,23 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 )}
 
                 <div className="border border-border/80 bg-card/60 p-3 text-left font-mono-tech text-[10px] sm:text-xs text-muted-foreground space-y-1">
-                  <p>
-                    <span className="text-foreground font-bold">Team:</span> {submission.teamName}
+                  <p className="break-words">
+                    <span className="text-foreground font-bold">Team:</span> {form.teamName}
                   </p>
-                  <p>
-                    <span className="text-foreground font-bold">Leader:</span>{" "}
-                    {submission.leaderName} ({submission.phone})
+                  <p className="break-words">
+                    <span className="text-foreground font-bold">Leader:</span> {form.leaderName} (
+                    {form.phone})
                   </p>
-                  <p>
+                  <p className="break-words">
                     <span className="text-foreground font-bold">Institution:</span>{" "}
-                    {submission.institution}
+                    {form.institution}
+                  </p>
+                  <p className="break-words">
+                    <span className="text-foreground font-bold">Front:</span> {form.track}
                   </p>
                   <p>
-                    <span className="text-foreground font-bold">Front:</span> {submission.track}
-                  </p>
-                  <p>
-                    <span className="text-foreground font-bold">Squad size:</span>{" "}
-                    {submission.teamSize} operators
+                    <span className="text-foreground font-bold">Squad size:</span> {form.teamSize}{" "}
+                    operators
                   </p>
                 </div>
 

@@ -5,6 +5,67 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import type { Plugin } from "vite";
+import { handleRegistrationsProxy, handlePaymentsProxy } from "./src/server/proxy-handlers.ts";
+
+function apiDevProxyPlugin(): Plugin {
+  return {
+    name: "api-dev-proxy",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+        if (
+          url.pathname === "/api/registrations" ||
+          url.pathname === "/api/registrations/" ||
+          url.pathname === "/api/payments" ||
+          url.pathname === "/api/payments/"
+        ) {
+          try {
+            const chunks: Uint8Array[] = [];
+            for await (const chunk of req) {
+              chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+            }
+            const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+
+            const headers = new Headers();
+            for (const [k, v] of Object.entries(req.headers)) {
+              if (v) {
+                if (Array.isArray(v)) {
+                  v.forEach((val) => headers.append(k, val));
+                } else {
+                  headers.set(k, v);
+                }
+              }
+            }
+
+            const webRequest = new Request(url.href, {
+              method: req.method,
+              headers,
+              body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
+            });
+
+            const webResponse = url.pathname.startsWith("/api/registrations")
+              ? await handleRegistrationsProxy(webRequest)
+              : await handlePaymentsProxy(webRequest);
+
+            res.statusCode = webResponse.status;
+            webResponse.headers.forEach((val, key) => {
+              res.setHeader(key, val);
+            });
+            const arrayBuffer = await webResponse.arrayBuffer();
+            res.end(Buffer.from(arrayBuffer));
+          } catch (err) {
+            console.error("API dev proxy error:", err);
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: String(err) }));
+          }
+        } else {
+          next();
+        }
+      });
+    },
+  };
+}
 
 export default defineConfig({
   tanstackStart: {
@@ -13,6 +74,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    plugins: [apiDevProxyPlugin()],
     server: {
       watch: {
         ignored: ["**/.output/**", "**/.nitro/**", "**/.wrangler/**"],

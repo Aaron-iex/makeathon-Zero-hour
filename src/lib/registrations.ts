@@ -11,6 +11,8 @@ export interface Registration {
   timestamp: string;
   checkedIn?: boolean;
   status?: "confirmed" | "pending" | "waitlist";
+  paid?: boolean;
+  paymentRef?: string;
 }
 
 export interface SubmissionResult {
@@ -21,6 +23,7 @@ export interface SubmissionResult {
 
 const STORAGE_KEY = "zeroth_hour_registrations";
 const SHEETS_URL_KEY = "zeroth_hour_sheets_url";
+const PAYMENTS_URL_KEY = "zeroth_hour_payments_url";
 
 // 1. Dedicated Backup Form URL (Triggered on Server Busy / Failure)
 export const BACKUP_GOOGLE_FORM_URL =
@@ -33,6 +36,10 @@ export const DUAL_SYNC_GOOGLE_FORM_RESPONSE_URL =
 // 3. Google Apps Script Webhook URL (Direct Google Sheets Row Ingestion)
 export const DEFAULT_SHEETS_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbycYaGTT0ppofK5v8Fg15OCN7_gkKiMo9vMKKc9vtXezbenKvO2RCwA2v_shoTup8e2/exec";
+
+// 4. Comms Automation Script Web App Deployment URL (Payment statuses & notifications)
+export const DEFAULT_PAYMENTS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
 
 export function getStoredRegistrations(): Registration[] {
   if (typeof window === "undefined") return [];
@@ -84,18 +91,55 @@ export function setGoogleSheetsWebhookUrl(url: string): void {
   localStorage.setItem(SHEETS_URL_KEY, url.trim());
 }
 
+export function getPaymentsWebhookUrl(): string {
+  if (typeof window === "undefined") return DEFAULT_PAYMENTS_WEBHOOK_URL;
+  return localStorage.getItem(PAYMENTS_URL_KEY) || DEFAULT_PAYMENTS_WEBHOOK_URL;
+}
+
+export function setPaymentsWebhookUrl(url: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(PAYMENTS_URL_KEY, url.trim());
+}
+
 /**
- * Syncs check-in status to Google Sheets
+ * Syncs check-in status to Google Sheets via caching proxy (with direct fallback)
  */
 export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promise<boolean> {
-  const url = getGoogleSheetsWebhookUrl();
-  if (!url) return false;
+  const webhookUrl = getGoogleSheetsWebhookUrl();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
 
+    const res = await fetch("/api/registrations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "updateCheckIn",
+        id,
+        checkedIn,
+        url: webhookUrl,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+      if (data && data.success !== false) {
+        return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy check-in sync failed, trying direct fallback:", proxyErr);
+  }
+
+  // Direct fallback to Google Sheets Webhook
+  if (!webhookUrl) return false;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
 
-    await fetch(url, {
+    await fetch(webhookUrl, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
@@ -110,23 +154,49 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
     clearTimeout(timer);
     return true;
   } catch (err) {
-    console.warn("Could not sync check-in to Google Sheets:", err);
+    console.warn("Could not sync check-in to Google Sheets directly:", err);
     return false;
   }
 }
 
 /**
- * Syncs deletion to Google Sheets
+ * Syncs deletion to Google Sheets via caching proxy (with direct fallback)
  */
 export async function syncDeleteToRemote(id: string): Promise<boolean> {
-  const url = getGoogleSheetsWebhookUrl();
-  if (!url) return false;
+  const webhookUrl = getGoogleSheetsWebhookUrl();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
 
+    const res = await fetch("/api/registrations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete",
+        id,
+        url: webhookUrl,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+      if (data && data.success !== false) {
+        return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy deletion sync failed, trying direct fallback:", proxyErr);
+  }
+
+  // Direct fallback to Google Sheets Webhook
+  if (!webhookUrl) return false;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
 
-    await fetch(url, {
+    await fetch(webhookUrl, {
       method: "POST",
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
@@ -140,7 +210,79 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
     clearTimeout(timer);
     return true;
   } catch (err) {
-    console.warn("Could not sync deletion to Google Sheets:", err);
+    console.warn("Could not sync deletion to Google Sheets directly:", err);
+    return false;
+  }
+}
+
+/**
+ * Syncs payment status to remote comms automation Web App via caching proxy (with direct fallback)
+ */
+export async function syncPaymentToRemote(
+  id: string,
+  email: string,
+  paymentRef: string,
+  leaderName: string,
+  teamName: string,
+): Promise<boolean> {
+  const paymentsUrl = getPaymentsWebhookUrl();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch("/api/payments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "markPaid",
+        id,
+        email,
+        paymentRef,
+        leaderName,
+        teamName,
+        paid: true,
+        url: paymentsUrl,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+      if (data && data.success !== false) {
+        return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy payment sync failed, trying direct fallback:", proxyErr);
+  }
+
+  // Direct fallback to payments webhook URL
+  if (!paymentsUrl) return false;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+
+    await fetch(paymentsUrl, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "markPaid",
+        id,
+        email,
+        paymentRef,
+        leaderName,
+        teamName,
+        paid: true,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    return true;
+  } catch (err) {
+    console.warn("Could not sync payment to remote directly:", err);
     return false;
   }
 }
@@ -200,10 +342,89 @@ export async function submitDirectlyToGoogleForm(
 }
 
 /**
- * Pull registrations live from the Google Sheet
+ * Pulls payment statuses live from the comms automation script via caching proxy (with direct fallback)
+ */
+export async function fetchPaymentStatuses(
+  urlOverride?: string,
+): Promise<{ success: boolean; data: Record<string, { paid: boolean; paymentRef?: string }> }> {
+  const url = (urlOverride || getPaymentsWebhookUrl()).trim();
+  if (!url) return { success: false, data: {} };
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    let res: Response | null = null;
+    try {
+      res = await fetch(`/api/payments?url=${encodeURIComponent(url)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+    } catch {
+      // Direct fallback
+      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+    }
+
+    clearTimeout(timeout);
+
+    if (res && res.ok) {
+      const json = (await res.json()) as unknown;
+      const result: Record<string, { paid: boolean; paymentRef?: string }> = {};
+
+      if (Array.isArray(json)) {
+        for (const item of json as Record<string, unknown>[]) {
+          const id = String(
+            item.id || item.ID || item["Pass ID"] || item["PassID"] || item.passId || "",
+          ).trim();
+          if (!id) continue;
+          const paid =
+            item.paid === true ||
+            String(item.paid || "").toLowerCase() === "true" ||
+            String(item.status || "").toLowerCase() === "paid" ||
+            String(item.paid || "").toUpperCase() === "YES" ||
+            String(item["Paid"] || "").toUpperCase() === "YES" ||
+            Boolean(item.paymentRef || item["Payment Ref"] || item.referenceId);
+          const paymentRef = String(
+            item.paymentRef ||
+              item.referenceId ||
+              item["Payment Ref"] ||
+              item["Payment Reference ID"] ||
+              "",
+          ).trim();
+
+          result[id] = { paid, paymentRef: paymentRef || undefined };
+        }
+      } else if (json && typeof json === "object") {
+        for (const [id, val] of Object.entries(json as Record<string, unknown>)) {
+          if (val && typeof val === "object") {
+            const v = val as Record<string, unknown>;
+            result[id] = {
+              paid: Boolean(v.paid),
+              paymentRef: v.paymentRef ? String(v.paymentRef) : undefined,
+            };
+          }
+        }
+      }
+      return { success: true, data: result };
+    }
+  } catch (err) {
+    console.warn("Could not fetch payment statuses:", err);
+  }
+  return { success: false, data: {} };
+}
+
+/**
+ * Pull registrations live from the Google Sheet via caching proxy (with direct fallback)
+ * and merge payment statuses purely client-side by matching ID
  */
 export async function fetchRemoteRegistrations(
   urlOverride?: string,
+  options?: { forceFresh?: boolean },
 ): Promise<{ success: boolean; data: Registration[]; message?: string }> {
   const url = (urlOverride || getGoogleSheetsWebhookUrl()).trim();
   if (!url) {
@@ -212,24 +433,36 @@ export async function fetchRemoteRegistrations(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
 
-    const res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal: controller.signal,
-    });
+    // Call caching proxy endpoint first
+    let res: Response | null = null;
+    try {
+      const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
+      res = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+    } catch {
+      // Direct fallback to Google Sheets
+      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    }
 
     clearTimeout(timeout);
 
-    if (!res.ok) {
-      throw new Error(`HTTP error ${res.status}: ${res.statusText}`);
+    if (!res || !res.ok) {
+      throw new Error(`HTTP error ${res?.status || "unknown"}: ${res?.statusText || ""}`);
     }
 
-    const json = await res.json();
+    const json = (await res.json()) as unknown;
     if (Array.isArray(json)) {
-      const parsed: Registration[] = json.map((item: Record<string, unknown>) => ({
+      const parsed: Registration[] = (json as Record<string, unknown>[]).map((item) => ({
         id: String(
           item.id ||
             item.ID ||
@@ -245,25 +478,59 @@ export async function fetchRemoteRegistrations(
         ),
         track: String(item.track || item.Track || item["Threat Sector"] || "General"),
         teamSize: String(item.teamSize || item["Team Size"] || item["Squad Size"] || "4"),
-        brief: item.brief || item.Brief || item["Mission Brief"] || "",
-        timestamp:
+        brief: String(item.brief || item.Brief || item["Mission Brief"] || ""),
+        timestamp: String(
           item.timestamp || item.Timestamp || item["Registered At"] || new Date().toISOString(),
+        ),
         checkedIn: Boolean(
           item.checkedIn ||
           item.CheckedIn ||
           String(item["Checked In"] || "").toUpperCase() === "YES",
         ),
-        status: item.status || "confirmed",
+        status: (item.status as Registration["status"]) || "confirmed",
+        paid: Boolean(item.paid || item.Paid || String(item["Paid"] || "").toUpperCase() === "YES"),
+        paymentRef: item.paymentRef
+          ? String(item.paymentRef)
+          : item["Payment Ref"]
+            ? String(item["Payment Ref"])
+            : undefined,
       }));
+
+      // Pull payment statuses in background / parallel and merge client-side
+      const payments = await fetchPaymentStatuses().catch(() => ({ success: false, data: {} }));
+      const paymentMap = payments.data || {};
 
       // Merge with local records
       const local = getStoredRegistrations();
       const map = new Map<string, Registration>();
-      // Put remote first
-      parsed.forEach((r) => map.set(r.id, r));
-      // Overwrite/add with local so fresh submissions aren't erased
+
+      // Put remote first and enrich with payments
+      parsed.forEach((r) => {
+        const payInfo = paymentMap[r.id];
+        if (payInfo) {
+          r.paid = payInfo.paid;
+          if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+        }
+        map.set(r.id, r);
+      });
+
+      // Overwrite/add with local so fresh submissions and local payment updates aren't erased
       local.forEach((r) => {
-        if (!map.has(r.id)) {
+        const existing = map.get(r.id);
+        if (existing) {
+          if (r.paid && !existing.paid) existing.paid = r.paid;
+          if (r.paymentRef && !existing.paymentRef) existing.paymentRef = r.paymentRef;
+          const payInfo = paymentMap[r.id];
+          if (payInfo?.paid) {
+            existing.paid = true;
+            if (payInfo.paymentRef) existing.paymentRef = payInfo.paymentRef;
+          }
+        } else {
+          const payInfo = paymentMap[r.id];
+          if (payInfo) {
+            r.paid = payInfo.paid;
+            if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+          }
           map.set(r.id, r);
         }
       });
@@ -373,6 +640,8 @@ export function exportRegistrationsToCsv(registrations: Registration[]): void {
     "Mission Brief",
     "Registered At",
     "Checked In",
+    "Payment Status",
+    "Payment Reference ID",
   ];
 
   const rows = registrations.map((r) => [
@@ -389,6 +658,8 @@ export function exportRegistrationsToCsv(registrations: Registration[]): void {
       ? new Date(r.timestamp).toLocaleString("en-GB")
       : new Date().toLocaleString("en-GB"),
     r.checkedIn ? "YES" : "NO",
+    r.paid ? "PAID" : "UNPAID",
+    `"${(r.paymentRef || "").replace(/"/g, '""')}"`,
   ]);
 
   const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getStoredRegistrations,
@@ -8,9 +8,12 @@ import {
   exportRegistrationsToCsv,
   getGoogleSheetsWebhookUrl,
   setGoogleSheetsWebhookUrl,
+  getPaymentsWebhookUrl,
+  setPaymentsWebhookUrl,
   fetchRemoteRegistrations,
   syncCheckInToRemote,
   syncDeleteToRemote,
+  syncPaymentToRemote,
   BACKUP_GOOGLE_FORM_URL,
   type Registration,
 } from "@/lib/registrations";
@@ -42,6 +45,7 @@ import {
   SlidersHorizontal,
   Layers,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -59,17 +63,22 @@ export function AdminDashboard() {
 
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [webhookUrl, setWebhookUrl] = useState("");
+  const [paymentsUrl, setPaymentsUrl] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTrack, setSelectedTrack] = useState<string>("all");
   const [checkInFilter, setCheckInFilter] = useState<"all" | "checked" | "unchecked">("all");
+  const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "team" | "id">("newest");
 
   // Modals
   const [selectedSquad, setSelectedSquad] = useState<Registration | null>(null);
+  const [paymentRefInput, setPaymentRefInput] = useState("");
+  const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -89,6 +98,7 @@ export function AdminDashboard() {
   const loadData = useCallback(() => {
     setRegistrations(getStoredRegistrations());
     setWebhookUrl(getGoogleSheetsWebhookUrl());
+    setPaymentsUrl(getPaymentsWebhookUrl());
   }, []);
 
   // Check existing session on mount & subscribe to live updates
@@ -128,7 +138,7 @@ export function AdminDashboard() {
       sessionStorage.setItem(AUTH_SESSION_KEY, "true");
       setPinError(false);
       loadData();
-      handleSyncRemote();
+      handleSyncRemote(true);
     } else {
       setPinError(true);
     }
@@ -140,10 +150,11 @@ export function AdminDashboard() {
     setPinInput("");
   };
 
-  const handleSyncRemote = async () => {
+  // Manual Sync (can bypass short cache)
+  const handleSyncRemote = async (forceFresh = false) => {
     setIsSyncing(true);
     try {
-      const res = await fetchRemoteRegistrations(webhookUrl);
+      const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh });
       if (res.success && res.data.length > 0) {
         setRegistrations(res.data);
       } else {
@@ -164,6 +175,46 @@ export function AdminDashboard() {
     }
   };
 
+  // Gentle auto-refresh against cached proxy endpoint every 25 seconds
+  const handleGentleAutoRefresh = useCallback(async () => {
+    if (isSyncing || isAutoRefreshing) return;
+    setIsAutoRefreshing(true);
+    try {
+      const res = await fetchRemoteRegistrations(webhookUrl);
+      if (res.success && res.data.length > 0) {
+        setRegistrations(res.data);
+      }
+      setLastSyncTime(
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+      );
+    } catch (err) {
+      console.warn("Gentle auto-refresh warning:", err);
+    } finally {
+      setIsAutoRefreshing(false);
+    }
+  }, [webhookUrl, isSyncing, isAutoRefreshing]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handleGentleAutoRefresh();
+      }
+    }, 25000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, handleGentleAutoRefresh]);
+
+  const handleSelectSquad = (squad: Registration) => {
+    setSelectedSquad(squad);
+    setPaymentRefInput(squad.paymentRef || "");
+  };
+
   const handleToggleCheckIn = (reg: Registration) => {
     const nextCheckIn = !reg.checkedIn;
     const updated = { ...reg, checkedIn: nextCheckIn };
@@ -173,8 +224,41 @@ export function AdminDashboard() {
     if (selectedSquad?.id === reg.id) {
       setSelectedSquad(updated);
     }
-    // 2. Sync in background to Google Sheets
+    // 2. Sync in background via caching proxy
     syncCheckInToRemote(reg.id, nextCheckIn);
+  };
+
+  const handleMarkPaid = async () => {
+    if (!selectedSquad) return;
+    const trimmedRef = paymentRefInput.trim();
+    if (!trimmedRef) return;
+
+    const updated: Registration = {
+      ...selectedSquad,
+      paid: true,
+      paymentRef: trimmedRef,
+    };
+
+    // 1. Optimistic instant local update
+    setSelectedSquad(updated);
+    saveRegistrationLocally(updated);
+    loadData();
+
+    // 2. Sync in background via payments proxy
+    setIsMarkingPaid(true);
+    try {
+      await syncPaymentToRemote(
+        updated.id,
+        updated.email,
+        trimmedRef,
+        updated.leaderName,
+        updated.teamName,
+      );
+    } catch (err) {
+      console.warn("Payment sync error:", err);
+    } finally {
+      setIsMarkingPaid(false);
+    }
   };
 
   const handleDeleteSquad = (id: string, teamName: string) => {
@@ -247,7 +331,8 @@ export function AdminDashboard() {
             r.email?.toLowerCase().includes(q) ||
             r.phone?.toLowerCase().includes(q) ||
             r.institution?.toLowerCase().includes(q) ||
-            r.track?.toLowerCase().includes(q);
+            r.track?.toLowerCase().includes(q) ||
+            r.paymentRef?.toLowerCase().includes(q);
           if (!match) return false;
         }
 
@@ -259,6 +344,10 @@ export function AdminDashboard() {
         // Checkin filter
         if (checkInFilter === "checked" && !r.checkedIn) return false;
         if (checkInFilter === "unchecked" && r.checkedIn) return false;
+
+        // Paid filter
+        if (paidFilter === "paid" && !r.paid) return false;
+        if (paidFilter === "unpaid" && r.paid) return false;
 
         return true;
       })
@@ -277,13 +366,14 @@ export function AdminDashboard() {
         }
         return 0;
       });
-  }, [registrations, searchQuery, selectedTrack, checkInFilter, sortBy]);
+  }, [registrations, searchQuery, selectedTrack, checkInFilter, paidFilter, sortBy]);
 
   // Analytics Metrics
   const metrics = useMemo(() => {
     const totalSquads = registrations.length;
     const totalOperatives = registrations.reduce((acc, r) => acc + (parseInt(r.teamSize) || 1), 0);
     const checkedInCount = registrations.filter((r) => r.checkedIn).length;
+    const paidCount = registrations.filter((r) => r.paid).length;
     const trackCounts: Record<string, number> = {};
     TRACKS.forEach((t) => {
       trackCounts[t.title] = 0;
@@ -293,7 +383,7 @@ export function AdminDashboard() {
       trackCounts[r.track] = curr + 1;
     });
 
-    return { totalSquads, totalOperatives, checkedInCount, trackCounts };
+    return { totalSquads, totalOperatives, checkedInCount, paidCount, trackCounts };
   }, [registrations]);
 
   // 🔒 Passcode Security Gate
@@ -460,21 +550,8 @@ export function AdminDashboard() {
             <p className="font-display text-2xl sm:text-3xl font-black text-white mt-2">
               {metrics.totalSquads}
             </p>
-            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">Registered Teams</p>
-          </div>
-
-          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
-                TOTAL OPERATIVES
-              </span>
-              <Users className="size-5 text-accent/70" />
-            </div>
-            <p className="font-display text-2xl sm:text-3xl font-black text-accent mt-2">
-              {metrics.totalOperatives}
-            </p>
             <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
-              Participants across squads
+              {metrics.totalOperatives} Total Operatives
             </p>
           </div>
 
@@ -502,13 +579,34 @@ export function AdminDashboard() {
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
-                CLOUD SYNC & BACKUP
+                PAID SQUADS
+              </span>
+              <CreditCard className="size-5 text-accent/70" />
+            </div>
+            <p className="font-display text-2xl sm:text-3xl font-black text-accent mt-2">
+              {metrics.paidCount}{" "}
+              <span className="text-sm font-normal text-neutral-500 font-sans">
+                / {metrics.totalSquads}
+              </span>
+            </p>
+            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
+              {metrics.totalSquads > 0
+                ? Math.round((metrics.paidCount / metrics.totalSquads) * 100)
+                : 0}
+              % fees reconciled
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                CLOUD CACHE & BACKUP
               </span>
               <Database className="size-5 text-neutral-400" />
             </div>
             <p className="font-mono-tech text-sm font-bold text-white mt-2 flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-emerald-400" />
-              Sheet & Form Active
+              {isAutoRefreshing ? "Syncing proxy..." : "Proxy Cache Active"}
             </p>
             <a
               href={BACKUP_GOOGLE_FORM_URL}
@@ -606,6 +704,16 @@ export function AdminDashboard() {
             </select>
 
             <select
+              value={paidFilter}
+              onChange={(e) => setPaidFilter(e.target.value as "all" | "paid" | "unpaid")}
+              className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-neutral-300 outline-none focus:border-primary"
+            >
+              <option value="all">All Payment Status</option>
+              <option value="paid">Paid Only</option>
+              <option value="unpaid">Unpaid Only</option>
+            </select>
+
+            <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as "newest" | "oldest" | "team" | "id")}
               className="bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-neutral-300 outline-none focus:border-primary"
@@ -656,6 +764,7 @@ export function AdminDashboard() {
                     setSearchQuery("");
                     setSelectedTrack("all");
                     setCheckInFilter("all");
+                    setPaidFilter("all");
                   }}
                   className="mt-4 font-mono-tech text-xs"
                 >
@@ -673,6 +782,7 @@ export function AdminDashboard() {
                     <th className="py-3 px-4 font-semibold">Leader & Contact</th>
                     <th className="py-3 px-4 font-semibold">Institution / College</th>
                     <th className="py-3 px-4 font-semibold">Sector</th>
+                    <th className="py-3 px-4 font-semibold text-center">Payment</th>
                     <th className="py-3 px-4 font-semibold text-center">Check-In</th>
                     <th className="py-3 px-4 font-semibold text-right">Actions</th>
                   </tr>
@@ -682,7 +792,7 @@ export function AdminDashboard() {
                     <tr
                       key={r.id}
                       className="hover:bg-neutral-800/40 transition-colors group cursor-pointer"
-                      onClick={() => setSelectedSquad(r)}
+                      onClick={() => handleSelectSquad(r)}
                     >
                       {/* ID */}
                       <td
@@ -706,40 +816,48 @@ export function AdminDashboard() {
                       </td>
 
                       {/* Squad Name & Size */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-white flex items-center gap-1.5">
-                          <span>{r.teamName}</span>
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-mono-tech bg-neutral-800 text-neutral-300 font-normal">
+                      <td className="py-3.5 px-4 min-w-[150px] max-w-[220px]">
+                        <div className="font-bold text-white flex items-center gap-1.5 flex-wrap break-words">
+                          <span className="break-words">{r.teamName}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono-tech bg-neutral-800 text-neutral-300 font-normal shrink-0">
                             {r.teamSize} {r.teamSize === "1" ? "solo" : "members"}
                           </span>
                         </div>
                         {r.brief && (
-                          <p className="text-[11px] text-neutral-400 truncate max-w-xs mt-0.5">
+                          <p
+                            className="text-[11px] text-neutral-400 break-words line-clamp-2 mt-0.5"
+                            title={r.brief}
+                          >
                             {r.brief}
                           </p>
                         )}
                       </td>
 
                       {/* Leader & Contact */}
-                      <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
-                        <div className="font-medium text-neutral-200">{r.leaderName}</div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] font-mono-tech">
+                      <td
+                        className="py-3.5 px-4 min-w-[170px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="font-medium text-neutral-200 break-words">
+                          {r.leaderName}
+                        </div>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mt-0.5 text-[11px] font-mono-tech">
                           {r.email && (
                             <a
                               href={`mailto:${r.email}`}
-                              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors"
+                              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors max-w-[160px] truncate"
                               title={r.email}
                             >
-                              <Mail className="size-3" />
-                              <span className="truncate max-w-[120px]">{r.email}</span>
+                              <Mail className="size-3 shrink-0" />
+                              <span className="truncate">{r.email}</span>
                             </a>
                           )}
                           {r.phone && (
                             <a
                               href={`tel:${r.phone}`}
-                              className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors"
+                              className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors whitespace-nowrap"
                             >
-                              <Phone className="size-3" />
+                              <Phone className="size-3 shrink-0" />
                               <span>{r.phone}</span>
                             </a>
                           )}
@@ -747,20 +865,45 @@ export function AdminDashboard() {
                       </td>
 
                       {/* Institution */}
-                      <td className="py-3.5 px-4 text-neutral-300">
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="size-3 text-neutral-500 shrink-0" />
-                          <span className="truncate max-w-[180px]" title={r.institution || "—"}>
+                      <td className="py-3.5 px-4 text-neutral-300 min-w-[160px] max-w-[220px]">
+                        <div className="flex items-start gap-1.5">
+                          <Building2 className="size-3 text-neutral-500 shrink-0 mt-0.5" />
+                          <span className="break-words" title={r.institution || "—"}>
                             {r.institution || "—"}
                           </span>
                         </div>
                       </td>
 
                       {/* Track / Sector */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-4 whitespace-nowrap">
                         <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono-tech font-semibold bg-neutral-800/80 border border-neutral-700/50 text-accent">
                           {r.track}
                         </span>
+                      </td>
+
+                      {/* Payment Status */}
+                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all ${
+                            r.paid
+                              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 shadow-sm shadow-emerald-900/30"
+                              : "bg-neutral-800/80 border border-neutral-700 text-neutral-400"
+                          }`}
+                          title={r.paymentRef ? `Payment Ref: ${r.paymentRef}` : "Payment pending"}
+                        >
+                          <span
+                            className={`size-1.5 rounded-full ${r.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
+                          />
+                          {r.paid ? "PAID" : "UNPAID"}
+                        </span>
+                        {r.paymentRef && (
+                          <div
+                            className="font-mono-tech text-[9px] text-neutral-400 mt-0.5 max-w-[110px] truncate mx-auto"
+                            title={`Ref: ${r.paymentRef}`}
+                          >
+                            {r.paymentRef}
+                          </div>
+                        )}
                       </td>
 
                       {/* Check-In Switch */}
@@ -787,7 +930,7 @@ export function AdminDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => setSelectedSquad(r)}
+                            onClick={() => handleSelectSquad(r)}
                             className="h-7 px-2.5 text-[11px] font-mono-tech border-neutral-800 hover:bg-neutral-800 text-neutral-300"
                           >
                             Details
@@ -813,24 +956,48 @@ export function AdminDashboard() {
       {/* ── Squad Detail Modal ── */}
       {selectedSquad && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
           onClick={() => setSelectedSquad(null)}
         >
           <div
-            className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-5"
+            className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between border-b border-neutral-800 pb-4">
-              <div>
+            <div className="flex items-start justify-between border-b border-neutral-800 pb-3 sm:pb-4">
+              <div className="min-w-0 pr-2">
                 <span className="font-mono-tech text-[10px] tracking-widest text-primary font-bold">
                   SQUAD CLEARANCE DOSSIER
                 </span>
-                <h3 className="font-display text-xl font-bold text-white mt-0.5">
+                <h3 className="font-display text-lg sm:text-xl font-bold text-white mt-0.5 break-words">
                   {selectedSquad.teamName}
                 </h3>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   <span className="font-mono-tech text-xs text-primary font-bold bg-primary/10 px-2 py-0.5 rounded border border-primary/20">
                     {selectedSquad.id}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono-tech font-bold ${
+                      selectedSquad.paid
+                        ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300"
+                        : "bg-neutral-800/80 border border-neutral-700 text-neutral-400"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${selectedSquad.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
+                    />
+                    {selectedSquad.paid ? "PAID" : "UNPAID"}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono-tech font-bold ${
+                      selectedSquad.checkedIn
+                        ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300"
+                        : "bg-neutral-800/80 border border-neutral-700 text-neutral-400"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${selectedSquad.checkedIn ? "bg-emerald-400" : "bg-neutral-500"}`}
+                    />
+                    {selectedSquad.checkedIn ? "CHECKED IN" : "PENDING CHECK-IN"}
                   </span>
                   <span className="text-xs font-mono-tech text-neutral-400">
                     {new Date(selectedSquad.timestamp).toLocaleString()}
@@ -839,18 +1006,20 @@ export function AdminDashboard() {
               </div>
               <button
                 onClick={() => setSelectedSquad(null)}
-                className="text-neutral-400 hover:text-white p-1 rounded"
+                className="text-neutral-400 hover:text-white p-1 rounded shrink-0"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
                 <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
                   LEADER NAME
                 </p>
-                <p className="font-bold text-neutral-200 mt-1">{selectedSquad.leaderName}</p>
+                <p className="font-bold text-neutral-200 mt-1 break-words">
+                  {selectedSquad.leaderName}
+                </p>
               </div>
 
               <div className="bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
@@ -866,7 +1035,7 @@ export function AdminDashboard() {
                 </p>
                 <a
                   href={`mailto:${selectedSquad.email}`}
-                  className="font-mono-tech text-accent hover:underline mt-1 block truncate"
+                  className="font-mono-tech text-accent hover:underline mt-1 block break-all"
                 >
                   {selectedSquad.email || "—"}
                 </a>
@@ -878,64 +1047,122 @@ export function AdminDashboard() {
                 </p>
                 <a
                   href={`tel:${selectedSquad.phone}`}
-                  className="font-mono-tech text-primary hover:underline mt-1 block"
+                  className="font-mono-tech text-primary hover:underline mt-1 block break-all"
                 >
                   {selectedSquad.phone || "—"}
                 </a>
               </div>
 
-              <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+              <div className="col-span-1 sm:col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
                 <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
                   INSTITUTION / COLLEGE
                 </p>
-                <p className="font-medium text-neutral-200 mt-1">
+                <p className="font-medium text-neutral-200 mt-1 break-words">
                   {selectedSquad.institution || "—"}
                 </p>
               </div>
 
-              <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+              <div className="col-span-1 sm:col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
                 <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
                   ASSIGNED THREAT SECTOR
                 </p>
-                <p className="font-bold text-accent mt-1">{selectedSquad.track}</p>
+                <p className="font-bold text-accent mt-1 break-words">{selectedSquad.track}</p>
+              </div>
+
+              <div className="col-span-1 sm:col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+                <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
+                  PAYMENT REFERENCE ID
+                </p>
+                <p className="font-mono-tech text-xs mt-1 break-all">
+                  {selectedSquad.paymentRef ? (
+                    <span className="text-emerald-400 font-bold">{selectedSquad.paymentRef}</span>
+                  ) : (
+                    <span className="text-neutral-500 italic">No reference ID registered</span>
+                  )}
+                </p>
               </div>
 
               {selectedSquad.brief && (
-                <div className="col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
+                <div className="col-span-1 sm:col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
                   <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
                     MISSION PROTOTYPE BRIEF
                   </p>
-                  <p className="text-neutral-300 mt-1 leading-relaxed whitespace-pre-wrap">
-                    {selectedSquad.brief}
-                  </p>
+                  <div className="mt-1 max-h-36 overflow-y-auto pr-2 rounded overscroll-contain">
+                    <p className="text-neutral-300 leading-relaxed whitespace-pre-wrap break-words text-xs">
+                      {selectedSquad.brief}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-neutral-800">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleToggleCheckIn(selectedSquad)}
-                className={`font-mono-tech text-xs ${
-                  selectedSquad.checkedIn
-                    ? "border-emerald-600 text-emerald-400"
-                    : "border-neutral-700"
-                }`}
-              >
-                <CheckCircle2 className="size-3.5 mr-1.5" />
-                {selectedSquad.checkedIn ? "Checked In (Click to Undo)" : "Mark as Checked In"}
-              </Button>
+            {/* Payment & Check-In Action Section */}
+            <div className="border-t border-neutral-800 pt-3 sm:pt-4 space-y-3">
+              <div className="bg-neutral-950/70 border border-neutral-800/90 rounded-lg p-3 space-y-2">
+                <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center gap-1.5">
+                  <CreditCard className="size-3 text-accent" />
+                  PAYMENT CLEARANCE // REFERENCE ID
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={paymentRefInput}
+                    onChange={(e) => setPaymentRefInput(e.target.value)}
+                    placeholder="Enter Payment Reference ID (e.g. UPI / Txn ID)..."
+                    className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary placeholder:text-neutral-500"
+                  />
+                  <Button
+                    variant="tactical"
+                    size="sm"
+                    disabled={!paymentRefInput.trim() || isMarkingPaid}
+                    onClick={handleMarkPaid}
+                    className="h-9 px-3 font-mono-tech text-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isMarkingPaid ? (
+                      <>
+                        <RefreshCw className="size-3.5 mr-1.5 animate-spin" />
+                        Syncing...
+                      </>
+                    ) : selectedSquad.paid ? (
+                      <>
+                        <Check className="size-3.5 mr-1.5 text-emerald-400" />
+                        Update Reference
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="size-3.5 mr-1.5" />
+                        Mark Paid
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleDeleteSquad(selectedSquad.id, selectedSquad.teamName)}
-                className="font-mono-tech text-xs text-red-400 border-red-900/40 hover:bg-red-950/40"
-              >
-                <Trash2 className="size-3.5 mr-1.5" />
-                Delete Squad
-              </Button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleToggleCheckIn(selectedSquad)}
+                  className={`font-mono-tech text-xs h-9 justify-center ${
+                    selectedSquad.checkedIn
+                      ? "border-emerald-600 text-emerald-400 hover:bg-emerald-950/30"
+                      : "border-neutral-700 hover:bg-neutral-800"
+                  }`}
+                >
+                  <CheckCircle2 className="size-3.5 mr-1.5 shrink-0" />
+                  {selectedSquad.checkedIn ? "Checked In (Click to Undo)" : "Mark as Checked In"}
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDeleteSquad(selectedSquad.id, selectedSquad.teamName)}
+                  className="font-mono-tech text-xs h-9 justify-center text-red-400 border-red-900/40 hover:bg-red-950/40 hover:border-red-800"
+                >
+                  <Trash2 className="size-3.5 mr-1.5 shrink-0" />
+                  Delete Squad
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1150,7 +1377,7 @@ export function AdminDashboard() {
               {/* Webhook URL configuration */}
               <div className="space-y-1.5">
                 <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
-                  GOOGLE APPS SCRIPT WEB APP URL
+                  GOOGLE APPS SCRIPT WEB APP URL (REGISTRATIONS)
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -1165,7 +1392,36 @@ export function AdminDashboard() {
                     variant="tactical"
                     onClick={() => {
                       setGoogleSheetsWebhookUrl(webhookUrl);
-                      alert("Webhook URL saved successfully!");
+                      alert("Registrations webhook URL saved successfully!");
+                    }}
+                  >
+                    Save URL
+                  </Button>
+                </div>
+              </div>
+
+              {/* Comms / Payments Webhook URL configuration */}
+              <div className="space-y-1.5">
+                <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center justify-between">
+                  <span>COMMS & PAYMENTS AUTOMATION WEB APP URL</span>
+                  <span className="text-[9px] text-emerald-400 font-normal">
+                    ADDITIVE · NEVER TOUCHES MAIN SHEET
+                  </span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={paymentsUrl}
+                    onChange={(e) => setPaymentsUrl(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary"
+                  />
+                  <Button
+                    size="sm"
+                    variant="tactical"
+                    onClick={() => {
+                      setPaymentsWebhookUrl(paymentsUrl);
+                      alert("Comms / Payments Webhook URL saved successfully!");
                     }}
                   >
                     Save URL
