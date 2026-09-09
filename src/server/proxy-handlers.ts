@@ -179,7 +179,7 @@ export async function handleRegistrationsProxy(
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       const action = body.action as string | undefined;
-      
+
       // Protect admin actions, but allow public new registrations (where action is undefined or "register")
       if (action && action !== "register" && !isAuthenticated) {
         return jsonResponse({ error: "Unauthorized" }, 401);

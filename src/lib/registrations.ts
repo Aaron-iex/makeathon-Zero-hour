@@ -378,7 +378,6 @@ export async function fetchPaymentStatuses(
   options?: { forceFresh?: boolean },
 ): Promise<{ success: boolean; data: Record<string, { paid: boolean; paymentRef?: string }> }> {
   const url = (urlOverride || getPaymentsWebhookUrl()).trim();
-  if (!url) return { success: false, data: {} };
 
   try {
     const controller = new AbortController();
@@ -404,6 +403,7 @@ export async function fetchPaymentStatuses(
       }
     } catch {
       // Direct fallback
+      if (!url) return { success: false, data: {} };
       const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
         method: "GET",
         headers: { Accept: "application/json" },
@@ -498,9 +498,6 @@ export async function fetchRemoteRegistrations(
   options?: { forceFresh?: boolean },
 ): Promise<{ success: boolean; data: Registration[]; message?: string }> {
   const url = (urlOverride || getGoogleSheetsWebhookUrl()).trim();
-  if (!url) {
-    return { success: false, data: [], message: "No Google Sheets webhook URL configured." };
-  }
 
   try {
     const controller = new AbortController();
@@ -534,6 +531,9 @@ export async function fetchRemoteRegistrations(
         proxyErr,
       );
       // Direct fallback to Google Sheets
+      if (!url) {
+        return { success: false, data: [], message: "No Google Sheets webhook URL configured." };
+      }
       const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
         method: "GET",
         headers: { Accept: "application/json" },
