@@ -13,6 +13,9 @@ export interface Registration {
   status?: "confirmed" | "pending" | "waitlist";
   paid?: boolean;
   paymentRef?: string;
+  source?: "remote" | "local";
+  syncedToRemote?: boolean;
+  lastLocalEdit?: number;
 }
 
 export interface SubmissionResult {
@@ -44,7 +47,11 @@ export const DEFAULT_PAYMENTS_WEBHOOK_URL =
 export function getStoredRegistrations(): Registration[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // Migration & cleanup: Remove legacy persistent cache from localStorage
+    if (localStorage.getItem(STORAGE_KEY)) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    const raw = sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     console.error("Error reading registrations:", e);
@@ -55,10 +62,21 @@ export function getStoredRegistrations(): Registration[] {
 export function saveAllRegistrations(list: Registration[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     window.dispatchEvent(new Event("zeroth_registration_updated"));
   } catch (e) {
     console.error("Error saving registrations:", e);
+  }
+}
+
+export function clearStoredRegistrations(): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event("zeroth_registration_updated"));
+  } catch (e) {
+    console.error("Error clearing stored registrations:", e);
   }
 }
 
@@ -224,8 +242,10 @@ export async function syncPaymentToRemote(
   paymentRef: string,
   leaderName: string,
   teamName: string,
+  paid: boolean = true,
 ): Promise<boolean> {
   const paymentsUrl = getPaymentsWebhookUrl();
+  const action = paid ? "markPaid" : "markUnpaid";
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
@@ -234,13 +254,13 @@ export async function syncPaymentToRemote(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "markPaid",
+        action,
         id,
         email,
-        paymentRef,
+        paymentRef: paid ? paymentRef : "",
         leaderName,
         teamName,
-        paid: true,
+        paid,
         url: paymentsUrl,
       }),
       signal: controller.signal,
@@ -268,13 +288,13 @@ export async function syncPaymentToRemote(
       mode: "no-cors",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "markPaid",
+        action,
         id,
         email,
-        paymentRef,
+        paymentRef: paid ? paymentRef : "",
         leaderName,
         teamName,
-        paid: true,
+        paid,
       }),
       signal: controller.signal,
     });
@@ -346,6 +366,7 @@ export async function submitDirectlyToGoogleForm(
  */
 export async function fetchPaymentStatuses(
   urlOverride?: string,
+  options?: { forceFresh?: boolean },
 ): Promise<{ success: boolean; data: Record<string, { paid: boolean; paymentRef?: string }> }> {
   const url = (urlOverride || getPaymentsWebhookUrl()).trim();
   if (!url) return { success: false, data: {} };
@@ -356,7 +377,8 @@ export async function fetchPaymentStatuses(
 
     let res: Response | null = null;
     try {
-      res = await fetch(`/api/payments?url=${encodeURIComponent(url)}`, {
+      const proxyUrl = `/api/payments?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
+      res = await fetch(proxyUrl, {
         method: "GET",
         headers: { Accept: "application/json" },
         signal: controller.signal,
@@ -382,13 +404,15 @@ export async function fetchPaymentStatuses(
             item.id || item.ID || item["Pass ID"] || item["PassID"] || item.passId || "",
           ).trim();
           if (!id) continue;
-          const paid =
-            item.paid === true ||
-            String(item.paid || "").toLowerCase() === "true" ||
-            String(item.status || "").toLowerCase() === "paid" ||
-            String(item.paid || "").toUpperCase() === "YES" ||
-            String(item["Paid"] || "").toUpperCase() === "YES" ||
-            Boolean(item.paymentRef || item["Payment Ref"] || item.referenceId);
+
+          const isExplicitFalse =
+            item.paid === false ||
+            String(item.paid || "").toLowerCase() === "false" ||
+            String(item.status || "").toLowerCase() === "unpaid" ||
+            String(item.status || "").toLowerCase() === "not paid" ||
+            String(item.paid || "").toUpperCase() === "NO" ||
+            String(item["Paid"] || "").toUpperCase() === "NO";
+
           const paymentRef = String(
             item.paymentRef ||
               item.referenceId ||
@@ -397,15 +421,41 @@ export async function fetchPaymentStatuses(
               "",
           ).trim();
 
+          const paid =
+            !isExplicitFalse &&
+            (item.paid === true ||
+              String(item.paid || "").toLowerCase() === "true" ||
+              String(item.status || "").toLowerCase() === "paid" ||
+              String(item.paid || "").toUpperCase() === "YES" ||
+              String(item["Paid"] || "").toUpperCase() === "YES" ||
+              Boolean(paymentRef));
+
           result[id] = { paid, paymentRef: paymentRef || undefined };
         }
       } else if (json && typeof json === "object") {
         for (const [id, val] of Object.entries(json as Record<string, unknown>)) {
           if (val && typeof val === "object") {
             const v = val as Record<string, unknown>;
+            const isExplicitFalse =
+              v.paid === false ||
+              String(v.paid || "").toLowerCase() === "false" ||
+              String(v.status || "").toLowerCase() === "unpaid" ||
+              String(v.status || "").toLowerCase() === "not paid" ||
+              String(v["Paid"] || "").toUpperCase() === "NO";
+
+            const paymentRef = v.paymentRef ? String(v.paymentRef).trim() : undefined;
+
+            const isPaid =
+              !isExplicitFalse &&
+              (Boolean(v.paid) ||
+                String(v.paid || "").toLowerCase() === "true" ||
+                String(v.status || "").toLowerCase() === "paid" ||
+                String(v["Paid"] || "").toUpperCase() === "YES" ||
+                Boolean(paymentRef));
+
             result[id] = {
-              paid: Boolean(v.paid),
-              paymentRef: v.paymentRef ? String(v.paymentRef) : undefined,
+              paid: isPaid,
+              paymentRef,
             };
           }
         }
@@ -444,7 +494,11 @@ export async function fetchRemoteRegistrations(
         headers: { Accept: "application/json" },
         signal: controller.signal,
       });
-    } catch {
+      if (!res.ok) {
+        throw new Error(`Proxy status ${res.status}`);
+      }
+    } catch (proxyErr) {
+      console.warn("Proxy registrations fetch failed, trying direct fallback:", proxyErr);
       // Direct fallback to Google Sheets
       res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
         method: "GET",
@@ -494,44 +548,89 @@ export async function fetchRemoteRegistrations(
           : item["Payment Ref"]
             ? String(item["Payment Ref"])
             : undefined,
+        source: "remote",
+        syncedToRemote: true,
       }));
 
       // Pull payment statuses in background / parallel and merge client-side
-      const payments = await fetchPaymentStatuses().catch(() => ({ success: false, data: {} }));
+      const payments = await fetchPaymentStatuses(undefined, {
+        forceFresh: options?.forceFresh,
+      }).catch(() => ({ success: false, data: {} }));
       const paymentMap = payments.data || {};
 
       // Merge with local records
       const local = getStoredRegistrations();
       const map = new Map<string, Registration>();
 
-      // Put remote first and enrich with payments
+      // 1. Put remote first and enrich with payments
       parsed.forEach((r) => {
         const payInfo = paymentMap[r.id];
         if (payInfo) {
           r.paid = payInfo.paid;
-          if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+          if (payInfo.paymentRef !== undefined) r.paymentRef = payInfo.paymentRef;
         }
+        r.source = "remote";
+        r.syncedToRemote = true;
         map.set(r.id, r);
       });
 
-      // Overwrite/add with local so fresh submissions and local payment updates aren't erased
+      // 2. Safety check: Protect against upstream quota failures, partial responses, or timeouts.
+      // If we already have entries locally (>= 4) and remote returns < 50% of them,
+      // treat this as a partial/glitched fetch and do NOT remove missing entries.
+      const isSuspiciouslySmall =
+        local.length >= 4 && parsed.length < Math.ceil(local.length * 0.5);
+
+      // 3. Reconcile with local records:
+      // If forceFresh is requested, remote Google Sheet / Payments data is 100% authoritative.
+      // If !forceFresh, only preserve very recent optimistic local edits (<15s) while background write completes.
       local.forEach((r) => {
         const existing = map.get(r.id);
         if (existing) {
-          if (r.paid && !existing.paid) existing.paid = r.paid;
-          if (r.paymentRef && !existing.paymentRef) existing.paymentRef = r.paymentRef;
-          const payInfo = paymentMap[r.id];
-          if (payInfo?.paid) {
-            existing.paid = true;
-            if (payInfo.paymentRef) existing.paymentRef = payInfo.paymentRef;
+          const isRecentLocalEdit =
+            !options?.forceFresh &&
+            Boolean(r.lastLocalEdit && Date.now() - r.lastLocalEdit < 15000);
+
+          if (isRecentLocalEdit) {
+            if (typeof r.checkedIn === "boolean") existing.checkedIn = r.checkedIn;
+            if (typeof r.paid === "boolean") existing.paid = r.paid;
+            if (r.paymentRef !== undefined) existing.paymentRef = r.paymentRef;
+            existing.lastLocalEdit = r.lastLocalEdit;
           }
+          existing.source = "remote";
+          existing.syncedToRemote = true;
         } else {
-          const payInfo = paymentMap[r.id];
-          if (payInfo) {
-            r.paid = payInfo.paid;
-            if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+          // Absent from remote response:
+          // A. If the remote result is empty or suspiciously small, protect local data from accidental wipe
+          if (parsed.length === 0 || isSuspiciouslySmall) {
+            const payInfo = paymentMap[r.id];
+            if (payInfo) {
+              r.paid = payInfo.paid;
+              if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+            }
+            map.set(r.id, r);
+            return;
           }
-          map.set(r.id, r);
+
+          // B. If this is a locally-created pending submission that hasn't synced to Google Sheets yet
+          // (created within the last 15 minutes or explicitly marked source: "local"), retain it.
+          const isPendingLocal =
+            r.source === "local" ||
+            (!r.syncedToRemote &&
+              r.timestamp &&
+              Date.now() - new Date(r.timestamp).getTime() < 15 * 60 * 1000);
+
+          if (isPendingLocal) {
+            const payInfo = paymentMap[r.id];
+            if (payInfo) {
+              r.paid = payInfo.paid;
+              if (payInfo.paymentRef) r.paymentRef = payInfo.paymentRef;
+            }
+            map.set(r.id, r);
+            return;
+          }
+
+          // C. Reconcile: Entry was sourced from remote (or previously synced) and is now deleted
+          // in the Google Sheet. By omitting map.set(r.id, r), it is removed from local storage.
         }
       });
 
@@ -571,6 +670,8 @@ export async function submitRegistrationData(
     timestamp,
     status: "confirmed",
     checkedIn: false,
+    source: "local",
+    syncedToRemote: false,
   };
 
   // 1. Save locally for instant Excel export & instant admin console updates

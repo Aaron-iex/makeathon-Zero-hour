@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getStoredRegistrations,
@@ -11,10 +11,13 @@ import {
   getPaymentsWebhookUrl,
   setPaymentsWebhookUrl,
   fetchRemoteRegistrations,
+  clearStoredRegistrations,
   syncCheckInToRemote,
   syncDeleteToRemote,
   syncPaymentToRemote,
   BACKUP_GOOGLE_FORM_URL,
+  DEFAULT_SHEETS_WEBHOOK_URL,
+  DEFAULT_PAYMENTS_WEBHOOK_URL,
   type Registration,
 } from "@/lib/registrations";
 import { TRACKS } from "@/data/zeroth";
@@ -47,6 +50,7 @@ import {
   Sparkles,
   CreditCard,
   MessageCircle,
+  RotateCcw,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -101,18 +105,234 @@ function handleWhatsAppClick(
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+interface RegistrationRowProps {
+  registration: Registration;
+  isCopied: boolean;
+  onSelectSquad: (r: Registration) => void;
+  onCopy: (text: string, id: string) => void;
+  onToggleCheckIn: (r: Registration) => void;
+  onTogglePaid: (r: Registration) => void;
+  onDeleteSquad: (id: string, name: string) => void;
+}
+
+const RegistrationRow = memo(function RegistrationRow({
+  registration: r,
+  isCopied,
+  onSelectSquad,
+  onCopy,
+  onToggleCheckIn,
+  onTogglePaid,
+  onDeleteSquad,
+}: RegistrationRowProps) {
+  return (
+    <tr
+      className="hover:bg-neutral-800/40 transition-colors group cursor-pointer"
+      onClick={() => onSelectSquad(r)}
+    >
+      {/* ID */}
+      <td
+        className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-1.5">
+          <span>{r.id}</span>
+          <button
+            type="button"
+            onClick={() => onCopy(r.id, r.id)}
+            className="text-neutral-500 hover:text-white p-1 rounded transition-colors"
+            title="Copy ID"
+          >
+            {isCopied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+          </button>
+        </div>
+      </td>
+
+      {/* Squad Name & Size */}
+      <td className="py-3.5 px-4 min-w-[150px] max-w-[220px]">
+        <div className="font-bold text-white flex items-center gap-1.5 flex-wrap break-words">
+          <span className="break-words">{r.teamName}</span>
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono-tech bg-neutral-800 text-neutral-300 font-normal shrink-0">
+            {r.teamSize} {r.teamSize === "1" ? "solo" : "members"}
+          </span>
+        </div>
+        {r.brief && (
+          <p
+            className="text-[11px] text-neutral-400 break-words line-clamp-2 mt-0.5"
+            title={r.brief}
+          >
+            {r.brief}
+          </p>
+        )}
+      </td>
+
+      {/* Leader & Contact */}
+      <td className="py-3.5 px-4 min-w-[190px]" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="font-medium text-white flex items-center gap-1.5 break-words"
+          title={r.leaderName}
+        >
+          {r.leaderName}
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 mt-0.5 text-[11px] font-mono-tech flex-wrap">
+          {r.email && (
+            <a
+              href={`mailto:${r.email}`}
+              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors max-w-[160px] truncate"
+              title={r.email}
+            >
+              <Mail className="size-3 shrink-0" />
+              <span className="truncate">{r.email}</span>
+            </a>
+          )}
+          {r.phone && (
+            <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
+              <a
+                href={`tel:${r.phone}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors shrink-0"
+              >
+                <Phone className="size-3 shrink-0" />
+                <span>{r.phone}</span>
+              </a>
+              <button
+                type="button"
+                onClick={(e) => handleWhatsAppClick(e, r)}
+                className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/60 p-1 rounded transition-colors inline-flex items-center justify-center shrink-0 cursor-pointer"
+                title="Chat on WhatsApp"
+                aria-label={`Chat with ${r.leaderName} on WhatsApp`}
+              >
+                <MessageCircle className="size-3.5 shrink-0" />
+              </button>
+            </div>
+          )}
+        </div>
+      </td>
+
+      {/* Institution */}
+      <td className="py-3.5 px-4 text-neutral-300 min-w-[160px] max-w-[220px]">
+        <div className="flex items-start gap-1.5">
+          <Building2 className="size-3 text-neutral-500 shrink-0 mt-0.5" />
+          <span className="break-words" title={r.institution || "—"}>
+            {r.institution || "—"}
+          </span>
+        </div>
+      </td>
+
+      {/* Track / Sector */}
+      <td className="py-3.5 px-4 whitespace-nowrap">
+        <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono-tech font-semibold bg-neutral-800/80 border border-neutral-700/50 text-accent">
+          {r.track}
+        </span>
+      </td>
+
+      {/* Payment Status */}
+      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => onTogglePaid(r)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all cursor-pointer ${
+            r.paid
+              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/50 shadow-sm shadow-emerald-900/30"
+              : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500"
+          }`}
+          title={
+            r.paid
+              ? `Status: PAID ${r.paymentRef ? `(Ref: ${r.paymentRef})` : ""}. Click to revert to Not Paid`
+              : "Status: UNPAID. Click to mark paid or add reference"
+          }
+        >
+          <span
+            className={`size-1.5 rounded-full ${r.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
+          />
+          {r.paid ? "PAID" : "UNPAID"}
+        </button>
+        {r.paymentRef && (
+          <div
+            className="font-mono-tech text-[9px] text-neutral-400 mt-0.5 max-w-[110px] truncate mx-auto"
+            title={`Ref: ${r.paymentRef}`}
+          >
+            {r.paymentRef}
+          </div>
+        )}
+      </td>
+
+      {/* Check-In Switch */}
+      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => onToggleCheckIn(r)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all ${
+            r.checkedIn
+              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 shadow-sm shadow-emerald-900/30"
+              : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white"
+          }`}
+          title="Toggle Check-In (Updates both local & Google Sheets)"
+        >
+          <span
+            className={`size-1.5 rounded-full ${r.checkedIn ? "bg-emerald-400" : "bg-neutral-500"}`}
+          />
+          {r.checkedIn ? "CHECKED IN" : "PENDING"}
+        </button>
+      </td>
+
+      {/* Actions */}
+      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onSelectSquad(r)}
+            className="h-7 px-2.5 text-[11px] font-mono-tech border-neutral-800 hover:bg-neutral-800 text-neutral-300"
+          >
+            Details
+          </Button>
+          <button
+            type="button"
+            onClick={() => onDeleteSquad(r.id, r.teamName)}
+            className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded transition-colors"
+            title="Delete Squad from roster & Google Sheets"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 const DEFAULT_ADMIN_PIN = "Zero@123";
 const PIN_STORAGE_KEY = "zeroth_admin_pin";
 const AUTH_SESSION_KEY = "zeroth_admin_auth";
 
 export function AdminDashboard() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
+    }
+    return false;
+  });
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [paymentsUrl, setPaymentsUrl] = useState("");
+  // Render stored registrations IMMEDIATELY on load (0ms UI paint, non-blocking)
+  const [registrations, setRegistrations] = useState<Registration[]>(() => {
+    if (typeof window !== "undefined") {
+      return getStoredRegistrations();
+    }
+    return [];
+  });
+  const [webhookUrl, setWebhookUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      return getGoogleSheetsWebhookUrl();
+    }
+    return DEFAULT_SHEETS_WEBHOOK_URL;
+  });
+  const [paymentsUrl, setPaymentsUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      return getPaymentsWebhookUrl();
+    }
+    return DEFAULT_PAYMENTS_WEBHOOK_URL;
+  });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -150,14 +370,8 @@ export function AdminDashboard() {
     setPaymentsUrl(getPaymentsWebhookUrl());
   }, []);
 
-  // Check existing session on mount & subscribe to live updates
+  // Check multi-tab storage updates
   useEffect(() => {
-    const sessionAuth = sessionStorage.getItem(AUTH_SESSION_KEY);
-    if (sessionAuth === "true") {
-      setIsAuthenticated(true);
-      loadData();
-    }
-
     const handleStorageUpdate = () => {
       loadData();
     };
@@ -179,32 +393,13 @@ export function AdminDashboard() {
     );
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const correctPin = getSavedPin();
-    if (pinInput.trim() === correctPin) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem(AUTH_SESSION_KEY, "true");
-      setPinError(false);
-      loadData();
-      handleSyncRemote(true);
-    } else {
-      setPinError(true);
-    }
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
-    setIsAuthenticated(false);
-    setPinInput("");
-  };
-
   // Manual Sync (can bypass short cache)
   const handleSyncRemote = async (forceFresh = false) => {
+    const isFresh = Boolean(forceFresh && typeof forceFresh === "boolean");
     setIsSyncing(true);
     try {
-      const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh });
-      if (res.success && res.data.length > 0) {
+      const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
+      if (res.success && res.data) {
         setRegistrations(res.data);
       } else {
         loadData();
@@ -222,6 +417,30 @@ export function AdminDashboard() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const correctPin = getSavedPin();
+    if (pinInput.trim() === correctPin) {
+      setIsAuthenticated(true);
+      sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+      setPinError(false);
+      // Clean stale browser storage on login and sync fresh from Google Sheets
+      clearStoredRegistrations();
+      setRegistrations([]);
+      await handleSyncRemote(true);
+    } else {
+      setPinError(true);
+    }
+  };
+
+  const handleLogout = () => {
+    clearStoredRegistrations();
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    setIsAuthenticated(false);
+    setRegistrations([]);
+    setPinInput("");
   };
 
   // Gentle auto-refresh against cached proxy endpoint every 25 seconds
@@ -247,8 +466,12 @@ export function AdminDashboard() {
     }
   }, [webhookUrl, isSyncing, isAutoRefreshing]);
 
+  // Initial background fetch on mount + interval timer (non-blocking)
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    // Fetch fresh data in background immediately; UI already shows cached registrations
+    handleGentleAutoRefresh();
 
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
@@ -259,23 +482,54 @@ export function AdminDashboard() {
     return () => clearInterval(interval);
   }, [isAuthenticated, handleGentleAutoRefresh]);
 
-  const handleSelectSquad = (squad: Registration) => {
+  const handleSelectSquad = useCallback((squad: Registration) => {
     setSelectedSquad(squad);
     setPaymentRefInput(squad.paymentRef || "");
-  };
+  }, []);
 
-  const handleToggleCheckIn = (reg: Registration) => {
+  const handleToggleCheckIn = useCallback((reg: Registration) => {
     const nextCheckIn = !reg.checkedIn;
-    const updated = { ...reg, checkedIn: nextCheckIn };
+    const updated: Registration = {
+      ...reg,
+      checkedIn: nextCheckIn,
+      lastLocalEdit: Date.now(),
+    };
     // 1. Optimistic instant local update
     saveRegistrationLocally(updated);
-    loadData();
-    if (selectedSquad?.id === reg.id) {
-      setSelectedSquad(updated);
-    }
+    setRegistrations((prev) => prev.map((item) => (item.id === reg.id ? updated : item)));
+    setSelectedSquad((curr) => (curr?.id === reg.id ? updated : curr));
     // 2. Sync in background via caching proxy
     syncCheckInToRemote(reg.id, nextCheckIn);
-  };
+  }, []);
+
+  const handleTogglePaid = useCallback(async (reg: Registration) => {
+    if (reg.paid) {
+      if (
+        !window.confirm(
+          `Revert payment status for squad "${reg.teamName}" (${reg.id}) back to NOT PAID?`,
+        )
+      ) {
+        return;
+      }
+      const updated: Registration = {
+        ...reg,
+        paid: false,
+        paymentRef: undefined,
+        lastLocalEdit: Date.now(),
+      };
+      // 1. Instant local update
+      saveRegistrationLocally(updated);
+      setRegistrations((prev) => prev.map((item) => (item.id === reg.id ? updated : item)));
+      setSelectedSquad((curr) => (curr?.id === reg.id ? updated : curr));
+      setPaymentRefInput("");
+      // 2. Sync in background via payments proxy
+      syncPaymentToRemote(reg.id, reg.email, "", reg.leaderName, reg.teamName, false);
+    } else {
+      // If currently unpaid, open squad detail modal to enter reference ID or mark paid
+      setSelectedSquad(reg);
+      setPaymentRefInput(reg.paymentRef || "");
+    }
+  }, []);
 
   const handleMarkPaid = async () => {
     if (!selectedSquad) return;
@@ -286,6 +540,7 @@ export function AdminDashboard() {
       ...selectedSquad,
       paid: true,
       paymentRef: trimmedRef,
+      lastLocalEdit: Date.now(),
     };
 
     // 1. Optimistic instant local update
@@ -302,6 +557,7 @@ export function AdminDashboard() {
         trimmedRef,
         updated.leaderName,
         updated.teamName,
+        true,
       );
     } catch (err) {
       console.warn("Payment sync error:", err);
@@ -310,7 +566,48 @@ export function AdminDashboard() {
     }
   };
 
-  const handleDeleteSquad = (id: string, teamName: string) => {
+  const handleMarkUnpaid = async () => {
+    if (!selectedSquad) return;
+    if (
+      !window.confirm(
+        `Revert payment status for squad "${selectedSquad.teamName}" (${selectedSquad.id}) back to NOT PAID?`,
+      )
+    ) {
+      return;
+    }
+
+    const updated: Registration = {
+      ...selectedSquad,
+      paid: false,
+      paymentRef: undefined,
+      lastLocalEdit: Date.now(),
+    };
+
+    // 1. Optimistic instant local update
+    setSelectedSquad(updated);
+    setPaymentRefInput("");
+    saveRegistrationLocally(updated);
+    setRegistrations((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+
+    // 2. Sync in background via payments proxy
+    setIsMarkingPaid(true);
+    try {
+      await syncPaymentToRemote(
+        updated.id,
+        updated.email,
+        "",
+        updated.leaderName,
+        updated.teamName,
+        false,
+      );
+    } catch (err) {
+      console.warn("Payment revert sync error:", err);
+    } finally {
+      setIsMarkingPaid(false);
+    }
+  };
+
+  const handleDeleteSquad = useCallback((id: string, teamName: string) => {
     if (
       window.confirm(
         `Are you sure you want to delete squad "${teamName}" (${id})? This will remove it locally and from Google Sheets.`,
@@ -318,14 +615,18 @@ export function AdminDashboard() {
     ) {
       // 1. Instant local deletion
       deleteRegistrationLocally(id);
-      loadData();
-      if (selectedSquad?.id === id) {
-        setSelectedSquad(null);
-      }
+      setRegistrations((prev) => prev.filter((item) => item.id !== id));
+      setSelectedSquad((curr) => (curr?.id === id ? null : curr));
       // 2. Sync deletion to Google Sheets
       syncDeleteToRemote(id);
     }
-  };
+  }, []);
+
+  const handleCopy = useCallback((text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }, []);
 
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -336,6 +637,8 @@ export function AdminDashboard() {
       timestamp: new Date().toISOString(),
       status: "confirmed",
       checkedIn: true,
+      source: "local",
+      syncedToRemote: false,
     };
     saveRegistrationLocally(reg);
     loadData();
@@ -350,12 +653,6 @@ export function AdminDashboard() {
       teamSize: "4",
       brief: "",
     });
-  };
-
-  const handleCopy = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleExport = () => {
@@ -531,7 +828,7 @@ export function AdminDashboard() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleSyncRemote}
+              onClick={() => handleSyncRemote(true)}
               disabled={isSyncing}
               className="h-9 font-mono-tech text-xs border-neutral-800 hover:bg-neutral-900 text-neutral-200"
             >
@@ -851,177 +1148,16 @@ export function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-neutral-800/60 font-sans">
                   {filteredRegistrations.map((r) => (
-                    <tr
+                    <RegistrationRow
                       key={r.id}
-                      className="hover:bg-neutral-800/40 transition-colors group cursor-pointer"
-                      onClick={() => handleSelectSquad(r)}
-                    >
-                      {/* ID */}
-                      <td
-                        className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <span>{r.id}</span>
-                          <button
-                            onClick={() => handleCopy(r.id, r.id)}
-                            className="text-neutral-500 hover:text-white p-1 rounded transition-colors"
-                            title="Copy ID"
-                          >
-                            {copiedId === r.id ? (
-                              <Check className="size-3 text-emerald-400" />
-                            ) : (
-                              <Copy className="size-3" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-
-                      {/* Squad Name & Size */}
-                      <td className="py-3.5 px-4 min-w-[150px] max-w-[220px]">
-                        <div className="font-bold text-white flex items-center gap-1.5 flex-wrap break-words">
-                          <span className="break-words">{r.teamName}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono-tech bg-neutral-800 text-neutral-300 font-normal shrink-0">
-                            {r.teamSize} {r.teamSize === "1" ? "solo" : "members"}
-                          </span>
-                        </div>
-                        {r.brief && (
-                          <p
-                            className="text-[11px] text-neutral-400 break-words line-clamp-2 mt-0.5"
-                            title={r.brief}
-                          >
-                            {r.brief}
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Leader & Contact */}
-                      <td
-                        className="py-3.5 px-4 min-w-[190px]"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div
-                          className="font-medium text-white flex items-center gap-1.5 break-words"
-                          title={r.leaderName}
-                        >
-                          {r.leaderName}
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 mt-0.5 text-[11px] font-mono-tech flex-wrap">
-                          {r.email && (
-                            <a
-                              href={`mailto:${r.email}`}
-                              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors max-w-[160px] truncate"
-                              title={r.email}
-                            >
-                              <Mail className="size-3 shrink-0" />
-                              <span className="truncate">{r.email}</span>
-                            </a>
-                          )}
-                          {r.phone && (
-                            <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                              <a
-                                href={`tel:${r.phone}`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors shrink-0"
-                              >
-                                <Phone className="size-3 shrink-0" />
-                                <span>{r.phone}</span>
-                              </a>
-                              <button
-                                type="button"
-                                onClick={(e) => handleWhatsAppClick(e, r)}
-                                className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/60 p-1 rounded transition-colors inline-flex items-center justify-center shrink-0 cursor-pointer"
-                                title="Chat on WhatsApp"
-                                aria-label={`Chat with ${r.leaderName} on WhatsApp`}
-                              >
-                                <MessageCircle className="size-3.5 shrink-0" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Institution */}
-                      <td className="py-3.5 px-4 text-neutral-300 min-w-[160px] max-w-[220px]">
-                        <div className="flex items-start gap-1.5">
-                          <Building2 className="size-3 text-neutral-500 shrink-0 mt-0.5" />
-                          <span className="break-words" title={r.institution || "—"}>
-                            {r.institution || "—"}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Track / Sector */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono-tech font-semibold bg-neutral-800/80 border border-neutral-700/50 text-accent">
-                          {r.track}
-                        </span>
-                      </td>
-
-                      {/* Payment Status */}
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all ${
-                            r.paid
-                              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 shadow-sm shadow-emerald-900/30"
-                              : "bg-neutral-800/80 border border-neutral-700 text-neutral-400"
-                          }`}
-                          title={r.paymentRef ? `Payment Ref: ${r.paymentRef}` : "Payment pending"}
-                        >
-                          <span
-                            className={`size-1.5 rounded-full ${r.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
-                          />
-                          {r.paid ? "PAID" : "UNPAID"}
-                        </span>
-                        {r.paymentRef && (
-                          <div
-                            className="font-mono-tech text-[9px] text-neutral-400 mt-0.5 max-w-[110px] truncate mx-auto"
-                            title={`Ref: ${r.paymentRef}`}
-                          >
-                            {r.paymentRef}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Check-In Switch */}
-                      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => handleToggleCheckIn(r)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all ${
-                            r.checkedIn
-                              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 shadow-sm shadow-emerald-900/30"
-                              : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white"
-                          }`}
-                          title="Toggle Check-In (Updates both local & Google Sheets)"
-                        >
-                          <span
-                            className={`size-1.5 rounded-full ${r.checkedIn ? "bg-emerald-400" : "bg-neutral-500"}`}
-                          />
-                          {r.checkedIn ? "CHECKED IN" : "PENDING"}
-                        </button>
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSelectSquad(r)}
-                            className="h-7 px-2.5 text-[11px] font-mono-tech border-neutral-800 hover:bg-neutral-800 text-neutral-300"
-                          >
-                            Details
-                          </Button>
-                          <button
-                            onClick={() => handleDeleteSquad(r.id, r.teamName)}
-                            className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded transition-colors"
-                            title="Delete Squad from roster & Google Sheets"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                      registration={r}
+                      isCopied={copiedId === r.id}
+                      onSelectSquad={handleSelectSquad}
+                      onCopy={handleCopy}
+                      onToggleCheckIn={handleToggleCheckIn}
+                      onTogglePaid={handleTogglePaid}
+                      onDeleteSquad={handleDeleteSquad}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -1189,10 +1325,24 @@ export function AdminDashboard() {
             {/* Payment & Check-In Action Section */}
             <div className="border-t border-neutral-800 pt-3 sm:pt-4 space-y-3">
               <div className="bg-neutral-950/70 border border-neutral-800/90 rounded-lg p-3 space-y-2">
-                <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center gap-1.5">
-                  <CreditCard className="size-3 text-accent" />
-                  PAYMENT CLEARANCE // REFERENCE ID
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center gap-1.5">
+                    <CreditCard className="size-3 text-accent" />
+                    PAYMENT CLEARANCE // REFERENCE ID
+                  </label>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono-tech font-bold ${
+                      selectedSquad.paid
+                        ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300"
+                        : "bg-neutral-800/80 border border-neutral-700 text-neutral-400"
+                    }`}
+                  >
+                    <span
+                      className={`size-1.5 rounded-full ${selectedSquad.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
+                    />
+                    {selectedSquad.paid ? "PAID" : "UNPAID"}
+                  </span>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="text"
@@ -1201,30 +1351,46 @@ export function AdminDashboard() {
                     placeholder="Enter Payment Reference ID (e.g. UPI / Txn ID)..."
                     className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary placeholder:text-neutral-500"
                   />
-                  <Button
-                    variant="tactical"
-                    size="sm"
-                    disabled={!paymentRefInput.trim() || isMarkingPaid}
-                    onClick={handleMarkPaid}
-                    className="h-9 px-3 font-mono-tech text-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isMarkingPaid ? (
-                      <>
-                        <RefreshCw className="size-3.5 mr-1.5 animate-spin" />
-                        Syncing...
-                      </>
-                    ) : selectedSquad.paid ? (
-                      <>
-                        <Check className="size-3.5 mr-1.5 text-emerald-400" />
-                        Update Reference
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="size-3.5 mr-1.5" />
-                        Mark Paid
-                      </>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="tactical"
+                      size="sm"
+                      disabled={!paymentRefInput.trim() || isMarkingPaid}
+                      onClick={handleMarkPaid}
+                      className="h-9 px-3 font-mono-tech text-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isMarkingPaid ? (
+                        <>
+                          <RefreshCw className="size-3.5 mr-1.5 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : selectedSquad.paid ? (
+                        <>
+                          <Check className="size-3.5 mr-1.5 text-emerald-400" />
+                          Update Reference
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="size-3.5 mr-1.5" />
+                          Mark Paid
+                        </>
+                      )}
+                    </Button>
+
+                    {selectedSquad.paid && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isMarkingPaid}
+                        onClick={handleMarkUnpaid}
+                        className="h-9 px-3 font-mono-tech text-xs border-red-500/40 text-red-400 hover:bg-red-950/40 hover:border-red-500/70 transition-colors"
+                        title="Revert squad payment status back to NOT PAID"
+                      >
+                        <RotateCcw className="size-3.5 mr-1.5" />
+                        Mark as Not Paid
+                      </Button>
                     )}
-                  </Button>
+                  </div>
                 </div>
               </div>
 

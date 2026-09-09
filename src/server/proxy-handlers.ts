@@ -18,7 +18,7 @@ interface CacheRecord {
 const registrationsCache = new Map<string, CacheRecord>();
 const paymentsCache = new Map<string, CacheRecord>();
 
-const CACHE_TTL_MS = 18000; // 18 seconds cache window (15-20s requirement)
+const CACHE_TTL_MS = 6000; // 6 seconds cache window for fast sync & sheet reflection
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -76,10 +76,13 @@ export async function handleRegistrationsProxy(
             ...CORS_HEADERS,
             "Content-Type": cached.contentType,
             "X-Cache-Status": "HIT",
-            "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
+            "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
           },
         });
       }
+    } else {
+      // Invalidate cache immediately on fresh request
+      registrationsCache.delete(cacheKey);
     }
 
     // 2. Fetch upstream Google Sheets
@@ -243,10 +246,13 @@ export async function handlePaymentsProxy(
             ...CORS_HEADERS,
             "Content-Type": cached.contentType,
             "X-Cache-Status": "HIT",
-            "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
+            "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
           },
         });
       }
+    } else {
+      // Invalidate cache immediately on fresh request
+      paymentsCache.delete(cacheKey);
     }
 
     try {
