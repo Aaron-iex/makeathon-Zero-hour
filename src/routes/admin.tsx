@@ -393,31 +393,40 @@ export function AdminDashboard() {
     );
   };
 
+  const isSyncingRef = useRef(false);
+  const isAutoRefreshingRef = useRef(false);
+
   // Manual Sync (can bypass short cache)
-  const handleSyncRemote = async (forceFresh = false) => {
-    const isFresh = Boolean(forceFresh && typeof forceFresh === "boolean");
-    setIsSyncing(true);
-    try {
-      const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
-      if (res.success && res.data) {
-        setRegistrations(res.data);
-      } else {
+  const handleSyncRemote = useCallback(
+    async (forceFresh = false) => {
+      const isFresh = Boolean(forceFresh && typeof forceFresh === "boolean");
+      if (isSyncingRef.current) return;
+      isSyncingRef.current = true;
+      setIsSyncing(true);
+      try {
+        const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
+        if (res.success && res.data) {
+          setRegistrations(res.data);
+        } else {
+          loadData();
+        }
+        setLastSyncTime(
+          new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+        );
+      } catch (err) {
+        console.warn("Sync error:", err);
         loadData();
+      } finally {
+        isSyncingRef.current = false;
+        setIsSyncing(false);
       }
-      setLastSyncTime(
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }),
-      );
-    } catch (err) {
-      console.warn("Sync error:", err);
-      loadData();
-    } finally {
-      setIsSyncing(false);
-    }
-  };
+    },
+    [webhookUrl, loadData],
+  );
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -445,11 +454,12 @@ export function AdminDashboard() {
 
   // Gentle auto-refresh against cached proxy endpoint every 25 seconds
   const handleGentleAutoRefresh = useCallback(async () => {
-    if (isSyncing || isAutoRefreshing) return;
+    if (isSyncingRef.current || isAutoRefreshingRef.current) return;
+    isAutoRefreshingRef.current = true;
     setIsAutoRefreshing(true);
     try {
       const res = await fetchRemoteRegistrations(webhookUrl);
-      if (res.success && res.data.length > 0) {
+      if (res.success && res.data) {
         setRegistrations(res.data);
       }
       setLastSyncTime(
@@ -462,9 +472,10 @@ export function AdminDashboard() {
     } catch (err) {
       console.warn("Gentle auto-refresh warning:", err);
     } finally {
+      isAutoRefreshingRef.current = false;
       setIsAutoRefreshing(false);
     }
-  }, [webhookUrl, isSyncing, isAutoRefreshing]);
+  }, [webhookUrl]);
 
   // Initial background fetch on mount + interval timer (non-blocking)
   useEffect(() => {

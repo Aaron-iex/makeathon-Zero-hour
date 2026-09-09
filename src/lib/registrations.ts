@@ -141,7 +141,8 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
     });
 
     clearTimeout(timer);
-    if (res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("application/json")) {
       const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
       if (data && data.success !== false) {
         return true;
@@ -198,7 +199,8 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
     });
 
     clearTimeout(timer);
-    if (res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("application/json")) {
       const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
       if (data && data.success !== false) {
         return true;
@@ -267,7 +269,8 @@ export async function syncPaymentToRemote(
     });
 
     clearTimeout(timer);
-    if (res.ok) {
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("application/json")) {
       const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
       if (data && data.success !== false) {
         return true;
@@ -375,27 +378,36 @@ export async function fetchPaymentStatuses(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
-    let res: Response | null = null;
+    let json: unknown = null;
     try {
       const proxyUrl = `/api/payments?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
-      res = await fetch(proxyUrl, {
+      const proxyRes = await fetch(proxyUrl, {
         method: "GET",
         headers: { Accept: "application/json" },
         signal: controller.signal,
       });
+      const ct = proxyRes.headers.get("content-type") || "";
+      if (proxyRes.ok && ct.includes("application/json")) {
+        json = await proxyRes.json();
+      }
+      if (!json) {
+        throw new Error("Proxy did not return valid payments JSON");
+      }
     } catch {
       // Direct fallback
-      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
+      const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
         method: "GET",
         headers: { Accept: "application/json" },
         signal: controller.signal,
       });
+      if (directRes.ok) {
+        json = await directRes.json().catch(() => null);
+      }
     }
 
     clearTimeout(timeout);
 
-    if (res && res.ok) {
-      const json = (await res.json()) as unknown;
+    if (json) {
       const result: Record<string, { paid: boolean; paymentRef?: string }> = {};
 
       if (Array.isArray(json)) {
@@ -486,35 +498,46 @@ export async function fetchRemoteRegistrations(
     const timeout = setTimeout(() => controller.abort(), 12000);
 
     // Call caching proxy endpoint first
-    let res: Response | null = null;
+    let json: unknown = null;
     try {
       const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
-      res = await fetch(proxyUrl, {
+      const proxyRes = await fetch(proxyUrl, {
         method: "GET",
         headers: { Accept: "application/json" },
         signal: controller.signal,
       });
-      if (!res.ok) {
-        throw new Error(`Proxy status ${res.status}`);
+      const ct = proxyRes.headers.get("content-type") || "";
+      if (proxyRes.ok && ct.includes("application/json")) {
+        const parsedData = await proxyRes.json();
+        if (Array.isArray(parsedData)) {
+          json = parsedData;
+        }
+      }
+      if (!json) {
+        throw new Error("Proxy did not return valid registration array");
       }
     } catch (proxyErr) {
-      console.warn("Proxy registrations fetch failed, trying direct fallback:", proxyErr);
+      console.warn(
+        "Proxy registrations fetch failed, falling back to direct Google Sheets:",
+        proxyErr,
+      );
       // Direct fallback to Google Sheets
-      res = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
+      const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
         method: "GET",
         headers: { Accept: "application/json" },
         cache: "no-store",
         signal: controller.signal,
       });
+      if (directRes.ok) {
+        json = await directRes.json().catch(() => null);
+      }
     }
 
     clearTimeout(timeout);
 
-    if (!res || !res.ok) {
-      throw new Error(`HTTP error ${res?.status || "unknown"}: ${res?.statusText || ""}`);
+    if (!Array.isArray(json)) {
+      throw new Error("Remote response was not a valid array");
     }
-
-    const json = (await res.json()) as unknown;
     if (Array.isArray(json)) {
       const parsed: Registration[] = (json as Record<string, unknown>[]).map((item) => ({
         id: String(
