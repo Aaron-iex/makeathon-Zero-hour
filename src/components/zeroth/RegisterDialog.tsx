@@ -264,8 +264,8 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 <div className="flex items-center gap-2 border border-accent/40 bg-accent/10 p-2.5 text-left font-mono-tech text-[10px] text-accent">
                   <ShieldCheck className="size-4 shrink-0" />
                   <span>
-                    Bring physical hardware, college IDs, and components on Sept 23. Reporting time:
-                    08:30 IST.
+                    Payment link will be sent shortly after registration. Bring physical hardware,
+                    college IDs, and components on Sept 23 (Reporting: 08:30 IST).
                   </span>
                 </div>
 
@@ -406,8 +406,8 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
                 <div className="border-t border-border pt-3 sm:pt-4 text-left">
                   <p className="font-mono-tech text-[10px] sm:text-[11px] text-muted-foreground">
                     Fee: <span className="text-accent font-bold">₹200 / squad</span> · Food,
-                    high-speed Wi-Fi, mentorship included. Payment collected at check-in counter on
-                    Sept 23.
+                    high-speed Wi-Fi, mentorship included. Payment link will be sent shortly after
+                    registration.
                   </p>
                 </div>
 

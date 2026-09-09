@@ -229,7 +229,7 @@ export const FAQS = [
   },
   {
     q: "Who is allowed to enlist?",
-    a: "Students from all engineering disciplines, polytechnic colleges, and universities. Registration is ₹200 INR per team.",
+    a: "Students from all engineering disciplines, polytechnic colleges, and universities. Registration is ₹200 INR per team — payment link will be sent shortly after registration.",
   },
   {
     q: "How large can a squad be?",

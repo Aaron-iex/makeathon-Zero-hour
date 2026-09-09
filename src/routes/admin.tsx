@@ -46,11 +46,60 @@ import {
   Layers,
   Sparkles,
   CreditCard,
+  MessageCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
 });
+
+function buildWhatsAppUrl(squad: {
+  leaderName: string;
+  teamName: string;
+  id: string;
+  phone: string;
+}): string {
+  let cleanPhone = (squad.phone || "").replace(/\D/g, "");
+  if (cleanPhone.startsWith("0")) {
+    cleanPhone = cleanPhone.replace(/^0+/, "");
+  }
+  if (cleanPhone.length === 10 && !cleanPhone.startsWith("91")) {
+    cleanPhone = `91${cleanPhone}`;
+  }
+
+  const message = `Hi ${squad.leaderName}, greetings from Team Zeroth Hour! 🚀
+
+Your squad ${squad.teamName}, ${squad.id} is registered for Zeroth Hour, 5-hour makeathon on Sept 23 at Jaya Auditorium.
+
+To confirm your spot, please complete the payment:
+💰 Amount: ₹200 per team
+📲 Scan the QR code below to pay
+
+Once paid, send us:
+1. A screenshot of the payment
+2. The transaction reference ID / UTR number
+
+We'll confirm your slot and send you a confirmation email with your event details and OD letter.
+
+Any questions, just ask here. See you at Zeroth Hour!`;
+
+  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+}
+
+function handleWhatsAppClick(
+  e: React.MouseEvent,
+  squad: {
+    leaderName: string;
+    teamName: string;
+    id: string;
+    phone: string;
+  },
+) {
+  e.stopPropagation();
+  e.preventDefault();
+  const url = buildWhatsAppUrl(squad);
+  window.open(url, "_blank", "noopener,noreferrer");
+}
 
 const DEFAULT_ADMIN_PIN = "Zero@123";
 const PIN_STORAGE_KEY = "zeroth_admin_pin";
@@ -848,13 +897,16 @@ export function AdminDashboard() {
 
                       {/* Leader & Contact */}
                       <td
-                        className="py-3.5 px-4 min-w-[170px]"
+                        className="py-3.5 px-4 min-w-[190px]"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="font-medium text-neutral-200 break-words">
+                        <div
+                          className="font-medium text-white flex items-center gap-1.5 break-words"
+                          title={r.leaderName}
+                        >
                           {r.leaderName}
                         </div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mt-0.5 text-[11px] font-mono-tech">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5 mt-0.5 text-[11px] font-mono-tech flex-wrap">
                           {r.email && (
                             <a
                               href={`mailto:${r.email}`}
@@ -866,13 +918,25 @@ export function AdminDashboard() {
                             </a>
                           )}
                           {r.phone && (
-                            <a
-                              href={`tel:${r.phone}`}
-                              className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors whitespace-nowrap"
-                            >
-                              <Phone className="size-3 shrink-0" />
-                              <span>{r.phone}</span>
-                            </a>
+                            <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                              <a
+                                href={`tel:${r.phone}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-neutral-400 hover:text-primary flex items-center gap-1 transition-colors shrink-0"
+                              >
+                                <Phone className="size-3 shrink-0" />
+                                <span>{r.phone}</span>
+                              </a>
+                              <button
+                                type="button"
+                                onClick={(e) => handleWhatsAppClick(e, r)}
+                                className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/60 p-1 rounded transition-colors inline-flex items-center justify-center shrink-0 cursor-pointer"
+                                title="Chat on WhatsApp"
+                                aria-label={`Chat with ${r.leaderName} on WhatsApp`}
+                              >
+                                <MessageCircle className="size-3.5 shrink-0" />
+                              </button>
+                            </div>
                           )}
                         </div>
                       </td>
@@ -1058,12 +1122,25 @@ export function AdminDashboard() {
                 <p className="font-mono-tech text-[10px] text-neutral-500 uppercase font-semibold">
                   PHONE
                 </p>
-                <a
-                  href={`tel:${selectedSquad.phone}`}
-                  className="font-mono-tech text-primary hover:underline mt-1 block break-all"
-                >
-                  {selectedSquad.phone || "—"}
-                </a>
+                <div className="flex items-center gap-2 flex-wrap mt-1">
+                  <a
+                    href={`tel:${selectedSquad.phone}`}
+                    className="font-mono-tech text-primary hover:underline break-all text-xs shrink-0"
+                  >
+                    {selectedSquad.phone || "—"}
+                  </a>
+                  {selectedSquad.phone && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleWhatsAppClick(e, selectedSquad)}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-mono-tech font-bold text-emerald-400 bg-emerald-950/70 border border-emerald-700/60 hover:bg-emerald-900/60 hover:text-emerald-300 px-2.5 py-1 rounded transition-colors shrink-0 cursor-pointer"
+                      title="Open WhatsApp message template"
+                    >
+                      <MessageCircle className="size-3.5 shrink-0" />
+                      <span>WhatsApp</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="col-span-1 sm:col-span-2 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800/80">
