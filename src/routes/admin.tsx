@@ -16,8 +16,6 @@ import {
   syncDeleteToRemote,
   syncPaymentToRemote,
   BACKUP_GOOGLE_FORM_URL,
-  DEFAULT_SHEETS_WEBHOOK_URL,
-  DEFAULT_PAYMENTS_WEBHOOK_URL,
   type Registration,
 } from "@/lib/registrations";
 import { TRACKS } from "@/data/zeroth";
@@ -230,9 +228,9 @@ const RegistrationRow = memo(function RegistrationRow({
         <button
           type="button"
           onClick={() => onTogglePaid(r)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all cursor-pointer ${
+          className={`group/btn inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all cursor-pointer min-w-[70px] ${
             r.paid
-              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/50 shadow-sm shadow-emerald-900/30"
+              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 hover:bg-red-950/80 hover:border-red-700/60 hover:text-red-400 shadow-sm shadow-emerald-900/30"
               : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500"
           }`}
           title={
@@ -242,9 +240,13 @@ const RegistrationRow = memo(function RegistrationRow({
           }
         >
           <span
-            className={`size-1.5 rounded-full ${r.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
+            className={`size-1.5 rounded-full transition-colors ${r.paid ? "bg-emerald-400 group-hover/btn:bg-red-400 group-hover/btn:hidden" : "bg-neutral-500"}`}
           />
-          {r.paid ? "PAID" : "UNPAID"}
+          {r.paid && <RotateCcw className="size-3 hidden group-hover/btn:block text-red-400" />}
+          <span className={r.paid ? "group-hover/btn:hidden" : ""}>
+            {r.paid ? "PAID" : "UNPAID"}
+          </span>
+          {r.paid && <span className="hidden group-hover/btn:block">UNDO</span>}
         </button>
         {r.paymentRef && (
           <div
@@ -300,7 +302,6 @@ const RegistrationRow = memo(function RegistrationRow({
   );
 });
 
-const DEFAULT_ADMIN_PIN = "Zero@123";
 const PIN_STORAGE_KEY = "zeroth_admin_pin";
 const AUTH_SESSION_KEY = "zeroth_admin_auth";
 
@@ -313,6 +314,7 @@ export function AdminDashboard() {
   });
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Render stored registrations IMMEDIATELY on load (0ms UI paint, non-blocking)
   const [registrations, setRegistrations] = useState<Registration[]>(() => {
@@ -325,13 +327,13 @@ export function AdminDashboard() {
     if (typeof window !== "undefined") {
       return getGoogleSheetsWebhookUrl();
     }
-    return DEFAULT_SHEETS_WEBHOOK_URL;
+    return "";
   });
   const [paymentsUrl, setPaymentsUrl] = useState(() => {
     if (typeof window !== "undefined") {
       return getPaymentsWebhookUrl();
     }
-    return DEFAULT_PAYMENTS_WEBHOOK_URL;
+    return "";
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
@@ -385,14 +387,6 @@ export function AdminDashboard() {
     };
   }, [loadData]);
 
-  const getSavedPin = () => {
-    return (
-      import.meta.env["VITE_ADMIN_PIN"] ||
-      localStorage.getItem(PIN_STORAGE_KEY) ||
-      DEFAULT_ADMIN_PIN
-    );
-  };
-
   const isSyncingRef = useRef(false);
   const isAutoRefreshingRef = useRef(false);
 
@@ -430,23 +424,40 @@ export function AdminDashboard() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const correctPin = getSavedPin();
-    if (pinInput.trim() === correctPin) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem(AUTH_SESSION_KEY, "true");
-      setPinError(false);
-      // Clean stale browser storage on login and sync fresh from Google Sheets
-      clearStoredRegistrations();
-      setRegistrations([]);
-      await handleSyncRemote(true);
-    } else {
+    setIsLoggingIn(true);
+    setPinError(false);
+    
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinInput.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      
+      if (res.ok && data?.success && data?.token) {
+        setIsAuthenticated(true);
+        sessionStorage.setItem(AUTH_SESSION_KEY, "true");
+        sessionStorage.setItem("zeroth_admin_token", data.token);
+        // Clean stale browser storage on login and sync fresh from Google Sheets
+        clearStoredRegistrations();
+        setRegistrations([]);
+        await handleSyncRemote(true);
+      } else {
+        setPinError(true);
+      }
+    } catch (error) {
+      console.error("Login error:", error);
       setPinError(true);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
   const handleLogout = () => {
     clearStoredRegistrations();
     sessionStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem("zeroth_admin_token");
     setIsAuthenticated(false);
     setRegistrations([]);
     setPinInput("");
@@ -1394,11 +1405,11 @@ export function AdminDashboard() {
                         size="sm"
                         disabled={isMarkingPaid}
                         onClick={handleMarkUnpaid}
-                        className="h-9 px-3 font-mono-tech text-xs border-red-500/40 text-red-400 hover:bg-red-950/40 hover:border-red-500/70 transition-colors"
+                        className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
                         title="Revert squad payment status back to NOT PAID"
                       >
                         <RotateCcw className="size-3.5 mr-1.5" />
-                        Mark as Not Paid
+                        Revert to Unpaid
                       </Button>
                     )}
                   </div>

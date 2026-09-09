@@ -36,14 +36,6 @@ export const BACKUP_GOOGLE_FORM_URL =
 export const DUAL_SYNC_GOOGLE_FORM_RESPONSE_URL =
   "https://docs.google.com/forms/d/e/1FAIpQLSeJ1VCfZRwyTOXMK2R4NXnD8_i1Kl7m0AEakBvAsxZ0OsGS1Q/formResponse";
 
-// 3. Google Apps Script Webhook URL (Direct Google Sheets Row Ingestion)
-export const DEFAULT_SHEETS_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbycYaGTT0ppofK5v8Fg15OCN7_gkKiMo9vMKKc9vtXezbenKvO2RCwA2v_shoTup8e2/exec";
-
-// 4. Comms Automation Script Web App Deployment URL (Payment statuses & notifications)
-export const DEFAULT_PAYMENTS_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
-
 export function getStoredRegistrations(): Registration[] {
   if (typeof window === "undefined") return [];
   try {
@@ -57,6 +49,11 @@ export function getStoredRegistrations(): Registration[] {
     console.error("Error reading registrations:", e);
     return [];
   }
+}
+
+function getAuthToken(): string {
+  if (typeof window === "undefined") return "";
+  return sessionStorage.getItem("zeroth_admin_token") || "";
 }
 
 export function saveAllRegistrations(list: Registration[]): void {
@@ -100,8 +97,8 @@ export function deleteRegistrationLocally(id: string): void {
 }
 
 export function getGoogleSheetsWebhookUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_SHEETS_WEBHOOK_URL;
-  return localStorage.getItem(SHEETS_URL_KEY) || DEFAULT_SHEETS_WEBHOOK_URL;
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(SHEETS_URL_KEY) || "";
 }
 
 export function setGoogleSheetsWebhookUrl(url: string): void {
@@ -110,8 +107,8 @@ export function setGoogleSheetsWebhookUrl(url: string): void {
 }
 
 export function getPaymentsWebhookUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_PAYMENTS_WEBHOOK_URL;
-  return localStorage.getItem(PAYMENTS_URL_KEY) || DEFAULT_PAYMENTS_WEBHOOK_URL;
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(PAYMENTS_URL_KEY) || "";
 }
 
 export function setPaymentsWebhookUrl(url: string): void {
@@ -130,7 +127,10 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
 
     const res = await fetch("/api/registrations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
+      },
       body: JSON.stringify({
         action: "updateCheckIn",
         id,
@@ -189,7 +189,10 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
 
     const res = await fetch("/api/registrations", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
+      },
       body: JSON.stringify({
         action: "delete",
         id,
@@ -254,7 +257,10 @@ export async function syncPaymentToRemote(
 
     const res = await fetch("/api/payments", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${getAuthToken()}`
+      },
       body: JSON.stringify({
         action,
         id,
@@ -383,7 +389,10 @@ export async function fetchPaymentStatuses(
       const proxyUrl = `/api/payments?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers: { 
+          Accept: "application/json",
+          Authorization: `Bearer ${getAuthToken()}`
+        },
         signal: controller.signal,
       });
       const ct = proxyRes.headers.get("content-type") || "";
@@ -503,7 +512,10 @@ export async function fetchRemoteRegistrations(
       const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
-        headers: { Accept: "application/json" },
+        headers: { 
+          Accept: "application/json",
+          Authorization: `Bearer ${getAuthToken()}`
+        },
         signal: controller.signal,
       });
       const ct = proxyRes.headers.get("content-type") || "";
