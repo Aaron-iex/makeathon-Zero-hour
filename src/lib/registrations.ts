@@ -718,33 +718,29 @@ export async function submitRegistrationData(
   }
 
   // 3. Dual-Sync: Submit simultaneously to Google Sheet Webhook AND Dual-Sync Google Form
-  const sheetsUrl = getGoogleSheetsWebhookUrl();
   const promises: Promise<unknown>[] = [];
 
   // A. Submit to Dual-Sync Google Form (https://forms.gle/2EKyiYHmae8oWEtf7)
   promises.push(submitDirectlyToGoogleForm(formData));
 
-  // B. Submit to Google Sheets Webhook
-  if (sheetsUrl) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+  // B. Submit to Google Sheets Webhook via our secure Proxy
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
 
-    const sheetPromise = fetch(sheetsUrl, {
-      method: "POST",
-      mode: "no-cors",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(newReg),
-      signal: controller.signal,
-    })
-      .then(() => clearTimeout(timer))
-      .catch((err) => {
-        console.warn("Google Sheets cloud sync error:", err);
-      });
+  const sheetPromise = fetch("/api/registrations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(newReg),
+    signal: controller.signal,
+  })
+    .then(() => clearTimeout(timer))
+    .catch((err) => {
+      console.warn("Google Sheets cloud sync error:", err);
+    });
 
-    promises.push(sheetPromise);
-  }
+  promises.push(sheetPromise);
 
   try {
     await Promise.allSettled(promises);

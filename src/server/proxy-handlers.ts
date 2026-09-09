@@ -65,14 +65,13 @@ export async function handleRegistrationsProxy(
   }
 
   const authHeader = request.headers.get("Authorization");
-  if (!authHeader || authHeader !== `Bearer ${ADMIN_SECRET_TOKEN}`) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
-  }
+  const isAuthenticated = authHeader === `Bearer ${ADMIN_SECRET_TOKEN}`;
 
   const url = new URL(request.url);
 
-  // ── GET: Read cached registrations from Google Sheets ──
+  // ── GET: Read cached registrations from Google Sheets (Admin Only) ──
   if (request.method === "GET") {
+    if (!isAuthenticated) return jsonResponse({ error: "Unauthorized" }, 401);
     const targetUrl = url.searchParams.get("url")?.trim() || DEFAULT_SHEETS_WEBHOOK_URL;
     const bypassCache =
       url.searchParams.get("fresh") === "1" ||
@@ -179,6 +178,13 @@ export async function handleRegistrationsProxy(
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+      const action = body.action as string | undefined;
+      
+      // Protect admin actions, but allow public new registrations (where action is undefined or "register")
+      if (action && action !== "register" && !isAuthenticated) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+
       const targetUrl =
         (typeof body.url === "string" && body.url.trim()) || DEFAULT_SHEETS_WEBHOOK_URL;
 
