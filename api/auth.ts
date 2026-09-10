@@ -2,40 +2,84 @@ export const config = {
   runtime: "edge",
 };
 
+// Simple in-memory rate limiting map
+// Since this is edge, it resets on cold start or per-region, but provides basic protection
+const rateLimitMap = new Map<string, { attempts: number; lockoutUntil: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCorsOrigin(request: Request) {
+  const origin = request.headers.get("origin") || "";
+  if (
+    origin === "http://localhost:3000" ||
+    origin.endsWith("-makeathon-zero-hour.vercel.app") ||
+    origin === "https://makeathon-zero-hour.vercel.app"
+  ) {
+    return origin;
+  }
+  return "https://makeathon-zero-hour.vercel.app";
+}
+
 export default async function handler(request: Request) {
+  const origin = getCorsOrigin(request);
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
   if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (request.method === "POST") {
     try {
+      const ip =
+        request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+
+      const rateData = rateLimitMap.get(ip) || { attempts: 0, lockoutUntil: 0 };
+
+      if (Date.now() < rateData.lockoutUntil) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Too many attempts. Please try again later." }),
+          {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
       const body = await request.json().catch(() => ({}));
       const { pin } = body;
-      const correctPin = process.env.ADMIN_PIN || "Zero@123";
-      const token = process.env.ADMIN_SECRET_TOKEN || "zeroth-secure-token-xyz-987";
+
+      // Enforce environment variables without fallbacks
+      const correctPin = process.env.ADMIN_PIN;
+      const token = process.env.ADMIN_SECRET_TOKEN;
+
+      if (!correctPin || !token) {
+        return new Response(JSON.stringify({ success: false, error: "Server misconfiguration" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       if (pin === correctPin) {
+        // Reset rate limit on success
+        rateLimitMap.delete(ip);
         return new Response(JSON.stringify({ success: true, token }), {
           status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       } else {
-        return new Response(JSON.stringify({ success: false, error: "Invalid Passcode" }), {
+        rateData.attempts += 1;
+        if (rateData.attempts >= MAX_ATTEMPTS) {
+          rateData.lockoutUntil = Date.now() + LOCKOUT_MS;
+        }
+        rateLimitMap.set(ip, rateData);
+
+        return new Response(JSON.stringify({ success: false, error: "Invalid credentials" }), {
           status: 401,
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
     } catch (err) {

@@ -227,26 +227,22 @@ const RegistrationRow = memo(function RegistrationRow({
       <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
-          onClick={() => onTogglePaid(r)}
-          className={`group/btn inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all cursor-pointer min-w-[70px] ${
+          onClick={() => onSelectSquad(r)}
+          className={`group/btn inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all cursor-pointer min-w-[90px] justify-center ${
             r.paid
-              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 hover:bg-red-950/80 hover:border-red-700/60 hover:text-red-400 shadow-sm shadow-emerald-900/30"
+              ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 hover:bg-emerald-900/80 hover:border-emerald-500/60 shadow-sm shadow-emerald-900/30"
               : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500"
           }`}
           title={
             r.paid
-              ? `Status: PAID ${r.paymentRef ? `(Ref: ${r.paymentRef})` : ""}. Click to revert to Not Paid`
-              : "Status: UNPAID. Click to mark paid or add reference"
+              ? `Status: PAID ${r.paymentRef ? `(Ref: ${r.paymentRef})` : ""}. Click to view details`
+              : "Status: UNPAID. Click to view details"
           }
         >
           <span
-            className={`size-1.5 rounded-full transition-colors ${r.paid ? "bg-emerald-400 group-hover/btn:bg-red-400 group-hover/btn:hidden" : "bg-neutral-500"}`}
+            className={`size-1.5 rounded-full transition-colors ${r.paid ? "bg-emerald-400" : "bg-neutral-500"}`}
           />
-          {r.paid && <RotateCcw className="size-3 hidden group-hover/btn:block text-red-400" />}
-          <span className={r.paid ? "group-hover/btn:hidden" : ""}>
-            {r.paid ? "PAID" : "UNPAID"}
-          </span>
-          {r.paid && <span className="hidden group-hover/btn:block">UNDO</span>}
+          <span>{r.paid ? "PAID" : "UNPAID"}</span>
         </button>
         {r.paymentRef && (
           <div
@@ -263,7 +259,7 @@ const RegistrationRow = memo(function RegistrationRow({
         <button
           type="button"
           onClick={() => onToggleCheckIn(r)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all ${
+          className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono-tech font-bold transition-all min-w-[90px] ${
             r.checkedIn
               ? "bg-emerald-950/80 border border-emerald-600/60 text-emerald-300 shadow-sm shadow-emerald-900/30"
               : "bg-neutral-800/80 border border-neutral-700 text-neutral-400 hover:text-white"
@@ -350,8 +346,8 @@ export function AdminDashboard() {
   const [selectedSquad, setSelectedSquad] = useState<Registration | null>(null);
   const [paymentRefInput, setPaymentRefInput] = useState("");
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+  const [confirmUnpaid, setConfirmUnpaid] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Add form state
@@ -506,6 +502,7 @@ export function AdminDashboard() {
 
   const handleSelectSquad = useCallback((squad: Registration) => {
     setSelectedSquad(squad);
+    setConfirmUnpaid(false);
     setPaymentRefInput(squad.paymentRef || "");
   }, []);
 
@@ -879,17 +876,6 @@ export function AdminDashboard() {
             >
               <Download className="size-3.5 mr-1.5" />
               Export CSV ({filteredRegistrations.length})
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettingsModal(true)}
-              className="h-9 font-mono-tech text-xs border-neutral-800 hover:bg-neutral-900 text-neutral-300"
-              title="Google Sheets & Forms Integration"
-            >
-              <LinkIcon className="size-3.5 mr-1 text-accent" />
-              <span className="hidden sm:inline">Google Sync</span>
             </Button>
 
             <Button
@@ -1399,19 +1385,44 @@ export function AdminDashboard() {
                       )}
                     </Button>
 
-                    {selectedSquad.paid && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={isMarkingPaid}
-                        onClick={handleMarkUnpaid}
-                        className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
-                        title="Revert squad payment status back to NOT PAID"
-                      >
-                        <RotateCcw className="size-3.5 mr-1.5" />
-                        Revert to Unpaid
-                      </Button>
-                    )}
+                    {selectedSquad.paid &&
+                      (confirmUnpaid ? (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={isMarkingPaid}
+                            onClick={() => {
+                              setConfirmUnpaid(false);
+                              handleMarkUnpaid();
+                            }}
+                            className="h-9 px-3 font-mono-tech text-xs bg-red-600 hover:bg-red-500 text-white transition-colors"
+                          >
+                            Confirm Revert
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isMarkingPaid}
+                            onClick={() => setConfirmUnpaid(false)}
+                            className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isMarkingPaid}
+                          onClick={() => setConfirmUnpaid(true)}
+                          className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
+                          title="Revert squad payment status back to NOT PAID"
+                        >
+                          <RotateCcw className="size-3.5 mr-1.5" />
+                          Revert to Unpaid
+                        </Button>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -1602,216 +1613,6 @@ export function AdminDashboard() {
                 </Button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Google Sheets & Form Integration Modal ── */}
-      {showSettingsModal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setShowSettingsModal(false)}
-        >
-          <div
-            className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <div>
-                <span className="font-mono-tech text-[10px] tracking-widest text-primary font-bold">
-                  INTEGRATION HUB
-                </span>
-                <h3 className="font-display text-lg font-bold text-white">
-                  Google Sheets & Forms Real-time Sync
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="text-neutral-400 hover:text-white"
-              >
-                <X className="size-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs">
-              {/* Direct Form Link Alert */}
-              <div className="bg-accent/10 border border-accent/30 p-3.5 rounded-lg flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-mono-tech font-bold text-accent text-xs">
-                    OFFICIAL BACKUP GOOGLE FORM
-                  </p>
-                  <p className="text-neutral-300 text-[11px] mt-0.5">
-                    If cloud sync is slow during high traffic, users are automatically directed
-                    here:
-                  </p>
-                </div>
-                <Button variant="tactical" size="sm" className="shrink-0" asChild>
-                  <a href={BACKUP_GOOGLE_FORM_URL} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-3.5 mr-1" /> Open Form
-                  </a>
-                </Button>
-              </div>
-
-              {/* Webhook URL configuration */}
-              <div className="space-y-1.5">
-                <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold">
-                  GOOGLE APPS SCRIPT WEB APP URL (REGISTRATIONS)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary"
-                  />
-                  <Button
-                    size="sm"
-                    variant="tactical"
-                    onClick={() => {
-                      setGoogleSheetsWebhookUrl(webhookUrl);
-                      alert("Registrations webhook URL saved successfully!");
-                    }}
-                  >
-                    Save URL
-                  </Button>
-                </div>
-              </div>
-
-              {/* Comms / Payments Webhook URL configuration */}
-              <div className="space-y-1.5">
-                <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center justify-between">
-                  <span>COMMS & PAYMENTS AUTOMATION WEB APP URL</span>
-                  <span className="text-[9px] text-emerald-400 font-normal">
-                    ADDITIVE · NEVER TOUCHES MAIN SHEET
-                  </span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={paymentsUrl}
-                    onChange={(e) => setPaymentsUrl(e.target.value)}
-                    placeholder="https://script.google.com/macros/s/.../exec"
-                    className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary"
-                  />
-                  <Button
-                    size="sm"
-                    variant="tactical"
-                    onClick={() => {
-                      setPaymentsWebhookUrl(paymentsUrl);
-                      alert("Comms / Payments Webhook URL saved successfully!");
-                    }}
-                  >
-                    Save URL
-                  </Button>
-                </div>
-              </div>
-
-              <div className="bg-neutral-950/80 p-4 rounded-lg border border-neutral-800 space-y-3">
-                <p className="font-mono-tech font-bold text-accent text-xs">
-                  ⚡ Complete Google Apps Script (Supports Inserts, Check-in Sync & Deletions)
-                </p>
-                <p className="text-neutral-400 leading-relaxed">
-                  Paste the code below in your Google Sheet's{" "}
-                  <strong>Extensions &gt; Apps Script</strong> and deploy as a Web App (Access:{" "}
-                  <em>Anyone</em>). It handles registration writes, check-in updates, deletions, and
-                  live data retrieval:
-                </p>
-                <pre className="bg-black p-3 rounded font-mono-tech text-[11px] overflow-x-auto text-emerald-400 border border-neutral-800 leading-relaxed max-h-60 overflow-y-auto">
-                  {`function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var data = JSON.parse(e.postData.contents);
-  var lock = LockService.getScriptLock();
-  lock.tryLock(10000);
-
-  try {
-    // 1. Update Check-in
-    if (data.action === "updateCheckIn") {
-      var values = sheet.getDataRange().getValues();
-      for (var i = 1; i < values.length; i++) {
-        if (String(values[i][0]) === String(data.id)) {
-          sheet.getRange(i + 1, 11).setValue(data.checkedIn ? "YES" : "NO");
-          break;
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ result: "success" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 2. Delete row
-    if (data.action === "delete") {
-      var values = sheet.getDataRange().getValues();
-      for (var i = 1; i < values.length; i++) {
-        if (String(values[i][0]) === String(data.id)) {
-          sheet.deleteRow(i + 1);
-          break;
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ result: "success" }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // 3. New Registration
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(["Pass ID", "Team Name", "Leader Name", "Email", "Mobile Number", "Institution", "Threat Sector", "Squad Size", "Mission Brief", "Registered At", "Checked In"]);
-    }
-    sheet.appendRow([
-      data.id || "",
-      data.teamName || "",
-      data.leaderName || "",
-      data.email || "",
-      data.phone || "",
-      data.institution || "",
-      data.track || "",
-      data.teamSize || "4",
-      data.brief || "",
-      data.timestamp ? new Date(data.timestamp).toLocaleString("en-GB") : new Date().toLocaleString("en-GB"),
-      data.checkedIn ? "YES" : "NO"
-    ]);
-
-    return ContentService.createTextOutput(JSON.stringify({ result: "success", id: data.id }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function doGet(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var values = sheet.getDataRange().getValues();
-  if (values.length <= 1) {
-    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-  }
-  var result = [];
-  for (var i = 1; i < values.length; i++) {
-    var row = values[i];
-    if (!row[0]) continue;
-    result.push({
-      id: String(row[0]),
-      teamName: String(row[1] || ""),
-      leaderName: String(row[2] || ""),
-      email: String(row[3] || ""),
-      phone: String(row[4] || ""),
-      institution: String(row[5] || ""),
-      track: String(row[6] || ""),
-      teamSize: String(row[7] || "4"),
-      brief: String(row[8] || ""),
-      timestamp: String(row[9] || ""),
-      checkedIn: String(row[10] || "").toUpperCase() === "YES"
-    });
-  }
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
-}`}
-                </pre>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-neutral-800">
-              <Button variant="outline" size="sm" onClick={() => setShowSettingsModal(false)}>
-                Close
-              </Button>
-            </div>
           </div>
         </div>
       )}

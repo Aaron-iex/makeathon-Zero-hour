@@ -5,18 +5,10 @@
  * and Vite dev server middleware.
  */
 
-// These default fallbacks can be replaced by Vercel environment variables:
-// process.env.SHEETS_WEBHOOK_URL
-// process.env.PAYMENTS_WEBHOOK_URL
-// process.env.ADMIN_SECRET_TOKEN
-
-const DEFAULT_SHEETS_WEBHOOK_URL =
-  process.env.SHEETS_WEBHOOK_URL ||
-  "https://script.google.com/macros/s/AKfycbycYaGTT0ppofK5v8Fg15OCN7_gkKiMo9vMKKc9vtXezbenKvO2RCwA2v_shoTup8e2/exec";
-const DEFAULT_PAYMENTS_WEBHOOK_URL =
-  process.env.PAYMENTS_WEBHOOK_URL ||
-  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
-const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN || "zeroth-secure-token-xyz-987";
+// NO FALLBACKS PERMITTED. Must fail securely if environment is misconfigured.
+const SHEETS_WEBHOOK_URL = process.env.SHEETS_WEBHOOK_URL;
+const PAYMENTS_WEBHOOK_URL = process.env.PAYMENTS_WEBHOOK_URL;
+const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN;
 
 interface CacheRecord {
   body: string;
@@ -25,43 +17,50 @@ interface CacheRecord {
   timestamp: number;
 }
 
-// In-memory cache shared across concurrent requests within the isolate/process
 const registrationsCache = new Map<string, CacheRecord>();
 const paymentsCache = new Map<string, CacheRecord>();
+const CACHE_TTL_MS = 6000;
 
-const CACHE_TTL_MS = 6000; // 6 seconds cache window for fast sync & sheet reflection
-
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization, X-Requested-With",
-};
+function getCorsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("origin") || "";
+  const allowed =
+    origin === "http://localhost:3000" ||
+    origin.endsWith("-makeathon-zero-hour.vercel.app") ||
+    origin === "https://makeathon-zero-hour.vercel.app"
+      ? origin
+      : "https://makeathon-zero-hour.vercel.app";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Accept, Authorization, X-Requested-With",
+  };
+}
 
 function jsonResponse(
   data: unknown,
   status = 200,
   extraHeaders: Record<string, string> = {},
-): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      ...CORS_HEADERS,
-      "Content-Type": "application/json; charset=utf-8",
-      ...extraHeaders,
-    },
-  });
+  request?: Request,
+) {
+  const headers = request
+    ? { ...getCorsHeaders(request), "Content-Type": "application/json", ...extraHeaders }
+    : { "Content-Type": "application/json", ...extraHeaders };
+  return new Response(JSON.stringify(data), { status, headers });
 }
 
-/**
- * Handles GET / POST requests to /api/registrations
- */
 export async function handleRegistrationsProxy(
   request: Request,
   _env?: unknown,
   _ctx?: unknown,
 ): Promise<Response> {
+  if (!SHEETS_WEBHOOK_URL || !ADMIN_SECRET_TOKEN) {
+    return jsonResponse({ error: "Server misconfiguration" }, 500, {}, request);
+  }
+
+  const corsHeaders = getCorsHeaders(request);
+
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   const authHeader = request.headers.get("Authorization");
@@ -71,8 +70,9 @@ export async function handleRegistrationsProxy(
 
   // ── GET: Read cached registrations from Google Sheets (Admin Only) ──
   if (request.method === "GET") {
-    if (!isAuthenticated) return jsonResponse({ error: "Unauthorized" }, 401);
-    const targetUrl = url.searchParams.get("url")?.trim() || DEFAULT_SHEETS_WEBHOOK_URL;
+    if (!isAuthenticated) return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
+
+    const targetUrl = url.searchParams.get("url")?.trim() || SHEETS_WEBHOOK_URL;
     const bypassCache =
       url.searchParams.get("fresh") === "1" ||
       url.searchParams.get("bypass") === "1" ||
@@ -81,14 +81,13 @@ export async function handleRegistrationsProxy(
     const cacheKey = targetUrl;
     const now = Date.now();
 
-    // 1. Check in-memory cache
     if (!bypassCache) {
       const cached = registrationsCache.get(cacheKey);
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         return new Response(cached.body, {
           status: cached.status,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": cached.contentType,
             "X-Cache-Status": "HIT",
             "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
@@ -96,11 +95,9 @@ export async function handleRegistrationsProxy(
         });
       }
     } else {
-      // Invalidate cache immediately on fresh request
       registrationsCache.delete(cacheKey);
     }
 
-    // 2. Fetch upstream Google Sheets
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
@@ -123,10 +120,8 @@ export async function handleRegistrationsProxy(
 
       const rawText = await upstreamRes.text();
 
-      // Validate that upstream returned valid JSON
       try {
         JSON.parse(rawText);
-        // Cache in-memory
         registrationsCache.set(cacheKey, {
           body: rawText,
           contentType: "application/json; charset=utf-8",
@@ -137,7 +132,7 @@ export async function handleRegistrationsProxy(
         return new Response(rawText, {
           status: 200,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": "application/json; charset=utf-8",
             "X-Cache-Status": "MISS",
             "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
@@ -149,13 +144,12 @@ export async function handleRegistrationsProxy(
     } catch (err) {
       console.warn("Registrations upstream fetch error:", err);
 
-      // Graceful fallback to stale cache if available
       const stale = registrationsCache.get(cacheKey);
       if (stale) {
         return new Response(stale.body, {
           status: 200,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": stale.contentType,
             "X-Cache-Status": "STALE-FALLBACK",
             "Cache-Control": "no-cache",
@@ -167,9 +161,10 @@ export async function handleRegistrationsProxy(
         {
           success: false,
           error: "Upstream Google Sheet fetch failed or timed out",
-          message: err instanceof Error ? err.message : String(err),
         },
         502,
+        {},
+        request,
       );
     }
   }
@@ -182,14 +177,28 @@ export async function handleRegistrationsProxy(
 
       // Protect admin actions, but allow public new registrations (where action is undefined or "register")
       if (action && action !== "register" && !isAuthenticated) {
-        return jsonResponse({ error: "Unauthorized" }, 401);
+        return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
       }
 
-      const targetUrl =
-        (typeof body.url === "string" && body.url.trim()) || DEFAULT_SHEETS_WEBHOOK_URL;
-
-      // Extract action payload without transport wrapper fields
+      const targetUrl = (typeof body.url === "string" && body.url.trim()) || SHEETS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
+
+      // Data Sanitization / Validation
+      if (!action || action === "register") {
+        const { teamName, leaderName, email, phone } = actionPayload as Record<string, unknown>;
+        if (!teamName || typeof teamName !== "string" || teamName.trim() === "") {
+          return jsonResponse({ error: "Invalid or missing teamName" }, 400, {}, request);
+        }
+        if (!leaderName || typeof leaderName !== "string" || leaderName.trim() === "") {
+          return jsonResponse({ error: "Invalid or missing leaderName" }, 400, {}, request);
+        }
+        if (!email || typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
+          return jsonResponse({ error: "Invalid or missing email" }, 400, {}, request);
+        }
+        if (!phone || typeof phone !== "string" || phone.replace(/\D/g, "").length < 10) {
+          return jsonResponse({ error: "Invalid or missing phone" }, 400, {}, request);
+        }
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
@@ -203,8 +212,6 @@ export async function handleRegistrationsProxy(
       });
 
       clearTimeout(timeout);
-
-      // Invalidate cache immediately so subsequent reads fetch fresh data
       registrationsCache.delete(targetUrl);
 
       const responseText = await upstreamRes.text().catch(() => "");
@@ -215,49 +222,57 @@ export async function handleRegistrationsProxy(
         responseJson = { raw: responseText };
       }
 
-      return jsonResponse({
-        success: upstreamRes.ok,
-        status: upstreamRes.status,
-        result: responseJson,
-      });
+      return jsonResponse(
+        {
+          success: upstreamRes.ok,
+          status: upstreamRes.status,
+          result: responseJson,
+        },
+        200,
+        {},
+        request,
+      );
     } catch (err) {
       console.error("Registrations proxy POST error:", err);
       return jsonResponse(
         {
           success: false,
           error: "Failed to forward action to Google Sheets",
-          message: err instanceof Error ? err.message : String(err),
         },
         500,
+        {},
+        request,
       );
     }
   }
 
-  return jsonResponse({ error: "Method not allowed" }, 405);
+  return jsonResponse({ error: "Method not allowed" }, 405, {}, request);
 }
 
-/**
- * Handles GET / POST requests to /api/payments
- */
 export async function handlePaymentsProxy(
   request: Request,
   _env?: unknown,
   _ctx?: unknown,
 ): Promise<Response> {
+  if (!PAYMENTS_WEBHOOK_URL || !ADMIN_SECRET_TOKEN) {
+    return jsonResponse({ error: "Server misconfiguration" }, 500, {}, request);
+  }
+
+  const corsHeaders = getCorsHeaders(request);
+
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: CORS_HEADERS });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   const authHeader = request.headers.get("Authorization");
   if (!authHeader || authHeader !== `Bearer ${ADMIN_SECRET_TOKEN}`) {
-    return jsonResponse({ error: "Unauthorized" }, 401);
+    return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
   }
 
   const url = new URL(request.url);
 
-  // ── GET: Read payment statuses from comms automation script ──
   if (request.method === "GET") {
-    const targetUrl = url.searchParams.get("url")?.trim() || DEFAULT_PAYMENTS_WEBHOOK_URL;
+    const targetUrl = url.searchParams.get("url")?.trim() || PAYMENTS_WEBHOOK_URL;
     const bypassCache =
       url.searchParams.get("fresh") === "1" || request.headers.get("cache-control") === "no-cache";
 
@@ -270,7 +285,7 @@ export async function handlePaymentsProxy(
         return new Response(cached.body, {
           status: cached.status,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": cached.contentType,
             "X-Cache-Status": "HIT",
             "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
@@ -278,7 +293,6 @@ export async function handlePaymentsProxy(
         });
       }
     } else {
-      // Invalidate cache immediately on fresh request
       paymentsCache.delete(cacheKey);
     }
 
@@ -316,7 +330,7 @@ export async function handlePaymentsProxy(
         return new Response(rawText, {
           status: 200,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": "application/json; charset=utf-8",
             "X-Cache-Status": "MISS",
             "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
@@ -327,13 +341,12 @@ export async function handlePaymentsProxy(
       }
     } catch (err) {
       console.warn("Payments upstream fetch error:", err);
-
       const stale = paymentsCache.get(cacheKey);
       if (stale) {
         return new Response(stale.body, {
           status: 200,
           headers: {
-            ...CORS_HEADERS,
+            ...corsHeaders,
             "Content-Type": stale.contentType,
             "X-Cache-Status": "STALE-FALLBACK",
             "Cache-Control": "no-cache",
@@ -345,21 +358,30 @@ export async function handlePaymentsProxy(
         {
           success: false,
           error: "Upstream Payments Webhook fetch failed or timed out",
-          message: err instanceof Error ? err.message : String(err),
         },
         502,
+        {},
+        request,
       );
     }
   }
 
-  // ── POST: Mark payment and sync to remote comms script ──
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-      const targetUrl =
-        (typeof body.url === "string" && body.url.trim()) || DEFAULT_PAYMENTS_WEBHOOK_URL;
-
+      const targetUrl = (typeof body.url === "string" && body.url.trim()) || PAYMENTS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
+
+      // Validation
+      if (actionPayload.action === "markPaid") {
+        if (
+          !actionPayload.paymentRef ||
+          typeof actionPayload.paymentRef !== "string" ||
+          actionPayload.paymentRef.trim() === ""
+        ) {
+          return jsonResponse({ error: "paymentRef is required" }, 400, {}, request);
+        }
+      }
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
@@ -373,8 +395,6 @@ export async function handlePaymentsProxy(
       });
 
       clearTimeout(timeout);
-
-      // Invalidate payment cache immediately
       paymentsCache.delete(targetUrl);
 
       const responseText = await upstreamRes.text().catch(() => "");
@@ -385,23 +405,29 @@ export async function handlePaymentsProxy(
         responseJson = { raw: responseText };
       }
 
-      return jsonResponse({
-        success: upstreamRes.ok,
-        status: upstreamRes.status,
-        result: responseJson,
-      });
+      return jsonResponse(
+        {
+          success: upstreamRes.ok,
+          status: upstreamRes.status,
+          result: responseJson,
+        },
+        200,
+        {},
+        request,
+      );
     } catch (err) {
       console.error("Payments proxy POST error:", err);
       return jsonResponse(
         {
           success: false,
           error: "Failed to forward payment to remote script",
-          message: err instanceof Error ? err.message : String(err),
         },
         500,
+        {},
+        request,
       );
     }
   }
 
-  return jsonResponse({ error: "Method not allowed" }, 405);
+  return jsonResponse({ error: "Method not allowed" }, 405, {}, request);
 }
