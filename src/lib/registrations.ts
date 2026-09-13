@@ -401,7 +401,8 @@ export async function fetchPaymentStatuses(
       if (!json) {
         throw new Error("Proxy did not return valid payments JSON");
       }
-    } catch {
+    } catch (err) {
+      console.error("Proxy fetch for payments failed:", err);
       // Direct fallback
       if (!url) return { success: false, data: {} };
       const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
@@ -419,8 +420,13 @@ export async function fetchPaymentStatuses(
     if (json) {
       const result: Record<string, { paid: boolean; paymentRef?: string }> = {};
 
-      if (Array.isArray(json)) {
-        for (const item of json as Record<string, unknown>[]) {
+      let targetJson = json;
+      if (json && typeof json === "object" && !Array.isArray(json) && Array.isArray((json as any).data)) {
+        targetJson = (json as any).data;
+      }
+      
+      if (Array.isArray(targetJson)) {
+        for (const item of targetJson as Record<string, unknown>[]) {
           const id = String(
             item.id || item.ID || item["Pass ID"] || item["PassID"] || item.passId || "",
           ).trim();
@@ -453,8 +459,8 @@ export async function fetchPaymentStatuses(
 
           result[id] = { paid, paymentRef: paymentRef || undefined };
         }
-      } else if (json && typeof json === "object") {
-        for (const [id, val] of Object.entries(json as Record<string, unknown>)) {
+      } else if (targetJson && typeof targetJson === "object") {
+        for (const [id, val] of Object.entries(targetJson as Record<string, unknown>)) {
           if (val && typeof val === "object") {
             const v = val as Record<string, unknown>;
             const isExplicitFalse =
