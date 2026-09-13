@@ -741,6 +741,9 @@ export function AdminDashboard() {
     const checkedInMembers = registrations
       .filter((r) => r.checkedIn)
       .reduce((acc, r) => acc + (parseInt(r.teamSize) || 1), 0);
+    const paidMembers = registrations
+      .filter((r) => r.paid)
+      .reduce((acc, r) => acc + (parseInt(r.teamSize) || 1), 0);
     const checkedInCount = registrations.filter((r) => r.checkedIn).length;
     const paidCount = registrations.filter((r) => r.paid).length;
     const trackCounts: Record<string, number> = {};
@@ -756,6 +759,7 @@ export function AdminDashboard() {
       totalSquads,
       totalOperatives,
       checkedInMembers,
+      paidMembers,
       checkedInCount,
       paidCount,
       trackCounts,
@@ -904,7 +908,7 @@ export function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* KPI Metrics Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
@@ -993,6 +997,27 @@ export function AdminDashboard() {
                 ? Math.round((metrics.paidCount / metrics.totalSquads) * 100)
                 : 0}
               % fees reconciled
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                MEMBERS PAID FOR
+              </span>
+              <CreditCard className="size-5 text-accent/70" />
+            </div>
+            <p className="font-display text-2xl sm:text-3xl font-black text-accent mt-2">
+              {metrics.paidMembers}{" "}
+              <span className="text-sm font-normal text-neutral-500 font-sans">
+                / {metrics.totalOperatives}
+              </span>
+            </p>
+            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
+              {metrics.totalOperatives > 0
+                ? Math.round((metrics.paidMembers / metrics.totalOperatives) * 100)
+                : 0}
+              % of members paid for
             </p>
           </div>
 
