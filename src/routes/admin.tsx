@@ -1438,7 +1438,7 @@ export function AdminDashboard() {
 
             {/* Payment & Check-In Action Section */}
             <div className="border-t border-neutral-800 pt-3 sm:pt-4 space-y-3">
-              <div className="bg-neutral-950/70 border border-neutral-800/90 rounded-lg p-3 space-y-2">
+              <div className="bg-neutral-950/70 border border-neutral-800/90 rounded-lg p-3 space-y-2 overflow-x-hidden">
                 <div className="flex items-center justify-between">
                   <label className="font-mono-tech text-[10px] text-neutral-400 uppercase font-semibold flex items-center gap-1.5">
                     <CreditCard className="size-3 text-accent" />
@@ -1457,21 +1457,21 @@ export function AdminDashboard() {
                     {selectedSquad.paid ? "PAID" : "UNPAID"}
                   </span>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-col gap-2">
                   <input
                     type="text"
                     value={paymentRefInput}
                     onChange={(e) => setPaymentRefInput(e.target.value)}
                     placeholder="Enter Payment Reference ID (e.g. UPI / Txn ID)..."
-                    className="flex-1 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary placeholder:text-neutral-500"
+                    className="w-full min-w-0 bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary placeholder:text-neutral-500"
                   />
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       variant="tactical"
                       size="sm"
                       disabled={!paymentRefInput.trim() || isMarkingPaid}
                       onClick={handleMarkPaid}
-                      className="h-9 px-3 font-mono-tech text-xs shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="h-9 px-3 font-mono-tech text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isMarkingPaid ? (
                         <>
@@ -1493,7 +1493,7 @@ export function AdminDashboard() {
 
                     {selectedSquad.paid &&
                       (confirmUnpaid ? (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 w-full mt-1">
                           <Button
                             variant="destructive"
                             size="sm"
@@ -1511,7 +1511,7 @@ export function AdminDashboard() {
                             size="sm"
                             disabled={isMarkingPaid}
                             onClick={() => setConfirmUnpaid(false)}
-                            className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
+                            className="h-9 px-3 w-auto font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
                           >
                             Cancel
                           </Button>
@@ -1522,7 +1522,7 @@ export function AdminDashboard() {
                           size="sm"
                           disabled={isMarkingPaid}
                           onClick={() => setConfirmUnpaid(true)}
-                          className="h-9 px-3 font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
+                          className="h-9 px-3 w-auto font-mono-tech text-xs border-neutral-700 text-neutral-300 hover:bg-neutral-800 transition-colors"
                           title="Revert squad payment status back to NOT PAID"
                         >
                           <RotateCcw className="size-3.5 mr-1.5" />
