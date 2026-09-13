@@ -130,7 +130,7 @@ const RegistrationRow = memo(function RegistrationRow({
     >
       {/* ID */}
       <td
-        className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap"
+        className="py-3.5 px-4 font-mono-tech font-bold text-primary whitespace-nowrap sticky left-0 z-10 bg-neutral-900 group-hover:bg-neutral-800/60 align-middle"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-1.5">
@@ -147,7 +147,7 @@ const RegistrationRow = memo(function RegistrationRow({
       </td>
 
       {/* Squad Name & Size */}
-      <td className="py-3.5 px-4 min-w-[150px] max-w-[220px]">
+      <td className="py-3.5 px-3 align-middle min-w-[130px] max-w-[180px]">
         <div className="font-bold text-white flex items-center gap-1.5 flex-wrap break-words">
           <span className="break-words">{r.teamName}</span>
           <span className="px-1.5 py-0.5 rounded text-[10px] font-mono-tech bg-neutral-800 text-neutral-300 font-normal shrink-0">
@@ -165,7 +165,7 @@ const RegistrationRow = memo(function RegistrationRow({
       </td>
 
       {/* Leader & Contact */}
-      <td className="py-3.5 px-4 min-w-[190px]" onClick={(e) => e.stopPropagation()}>
+      <td className="py-3.5 px-3 align-middle min-w-[160px]" onClick={(e) => e.stopPropagation()}>
         <div
           className="font-medium text-white flex items-center gap-1.5 break-words"
           title={r.leaderName}
@@ -176,7 +176,7 @@ const RegistrationRow = memo(function RegistrationRow({
           {r.email && (
             <a
               href={`mailto:${r.email}`}
-              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors max-w-[160px] truncate"
+              className="text-neutral-400 hover:text-accent flex items-center gap-1 transition-colors max-w-[140px] truncate"
               title={r.email}
             >
               <Mail className="size-3 shrink-0" />
@@ -208,24 +208,24 @@ const RegistrationRow = memo(function RegistrationRow({
       </td>
 
       {/* Institution */}
-      <td className="py-3.5 px-4 text-neutral-300 min-w-[160px] max-w-[220px]">
+      <td className="py-3.5 px-3 align-middle text-neutral-300 min-w-[130px] max-w-[180px]">
         <div className="flex items-start gap-1.5">
           <Building2 className="size-3 text-neutral-500 shrink-0 mt-0.5" />
-          <span className="break-words" title={r.institution || "—"}>
+          <span className="break-words line-clamp-2" title={r.institution || "—"}>
             {r.institution || "—"}
           </span>
         </div>
       </td>
 
       {/* Track / Sector */}
-      <td className="py-3.5 px-4 whitespace-nowrap">
-        <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono-tech font-semibold bg-neutral-800/80 border border-neutral-700/50 text-accent">
+      <td className="py-3.5 px-4 align-middle whitespace-nowrap">
+        <span className="inline-block px-2.5 py-1 rounded-md text-[11px] font-mono-tech font-semibold bg-neutral-800/80 border border-neutral-700/50 text-accent max-w-[140px] truncate align-bottom" title={r.track}>
           {r.track}
         </span>
       </td>
 
       {/* Payment Status */}
-      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+      <td className="py-3.5 px-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onSelectSquad(r)}
@@ -256,7 +256,7 @@ const RegistrationRow = memo(function RegistrationRow({
       </td>
 
       {/* Check-In Switch */}
-      <td className="py-3.5 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+      <td className="py-3.5 px-4 align-middle text-center" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onToggleCheckIn(r)}
@@ -275,7 +275,7 @@ const RegistrationRow = memo(function RegistrationRow({
       </td>
 
       {/* Actions */}
-      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+      <td className="py-3.5 px-4 align-middle text-right" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1.5">
           <Button
             variant="outline"
@@ -354,6 +354,7 @@ export function AdminDashboard() {
   const [confirmUnpaid, setConfirmUnpaid] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Add form state
   const [newSquad, setNewSquad] = useState({
@@ -712,6 +713,26 @@ export function AdminDashboard() {
   };
 
   // Filter & Search Logic
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Focus search on '/'
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && filteredRegistrations.length === 1) {
+      handleSelectSquad(filteredRegistrations[0]);
+      // Remove focus so modal can take over
+      searchInputRef.current?.blur();
+    }
+  };
+
   const filteredRegistrations = useMemo(() => {
     return registrations
       .filter((r) => {
@@ -1179,8 +1200,8 @@ export function AdminDashboard() {
         </div>
 
         {/* Squads Data Table */}
-        <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl overflow-hidden shadow-xl">
-          <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
+        <div className="bg-neutral-900/60 border border-neutral-800 rounded-xl shadow-xl">
+          <div className="p-4 border-b border-neutral-800 flex items-center justify-between rounded-t-xl bg-neutral-900/60">
             <div className="flex items-center gap-2">
               <h2 className="font-display text-sm font-bold uppercase tracking-wider text-white">
                 Enlisted Squads Roster
@@ -1225,15 +1246,15 @@ export function AdminDashboard() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto rounded-b-xl">
+              <table className="w-full min-w-[960px] text-left text-xs border-collapse align-middle">
                 <thead>
                   <tr className="border-b border-neutral-800 bg-neutral-900/90 font-mono-tech text-neutral-400 uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4 font-semibold">Pass ID</th>
-                    <th className="py-3 px-4 font-semibold">Squad Name</th>
-                    <th className="py-3 px-4 font-semibold">Leader & Contact</th>
-                    <th className="py-3 px-4 font-semibold">Institution / College</th>
-                    <th className="py-3 px-4 font-semibold">Sector</th>
+                    <th className="py-3 px-4 font-semibold sticky left-0 z-10 bg-neutral-900 align-middle">Pass ID</th>
+                    <th className="py-3 px-4 font-semibold align-middle">Squad Name</th>
+                    <th className="py-3 px-4 font-semibold align-middle">Leader & Contact</th>
+                    <th className="py-3 px-4 font-semibold align-middle">Institution / College</th>
+                    <th className="py-3 px-4 font-semibold align-middle">Sector</th>
                     <th className="py-3 px-4 font-semibold text-center">Payment</th>
                     <th className="py-3 px-4 font-semibold text-center">Check-In</th>
                     <th className="py-3 px-4 font-semibold text-right">Actions</th>
@@ -1567,7 +1588,18 @@ export function AdminDashboard() {
                   {selectedSquad.checkedIn ? "Checked In (Click to Undo)" : "Mark as Checked In"}
                 </Button>
 
-                {!selectedSquad.paid && (
+                {selectedSquad.paid ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    className="font-mono-tech text-xs h-9 justify-center text-neutral-600 border-neutral-800 bg-neutral-900/50"
+                    title="Paid squad — Revert to Unpaid to enable delete"
+                  >
+                    <Lock className="size-3.5 mr-1.5 shrink-0" />
+                    Delete Squad
+                  </Button>
+                ) : (
                   <Button
                     variant="outline"
                     size="sm"
