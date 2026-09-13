@@ -6,9 +6,9 @@
  */
 
 // NO FALLBACKS PERMITTED. Must fail securely if environment is misconfigured.
-const SHEETS_WEBHOOK_URL = process.env.SHEETS_WEBHOOK_URL;
-const PAYMENTS_WEBHOOK_URL = process.env.PAYMENTS_WEBHOOK_URL;
-const ADMIN_SECRET_TOKEN = process.env.ADMIN_SECRET_TOKEN;
+const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
+const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
+const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
 
 interface CacheRecord {
   body: string;
@@ -173,14 +173,15 @@ export async function handleRegistrationsProxy(
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-      const action = body.action as string | undefined;
+      const action = body["action"] as string | undefined;
 
       // Protect admin actions, but allow public new registrations (where action is undefined or "register")
       if (action && action !== "register" && !isAuthenticated) {
         return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
       }
 
-      const targetUrl = (typeof body.url === "string" && body.url.trim()) || SHEETS_WEBHOOK_URL;
+      const targetUrl =
+        (typeof body["url"] === "string" && body["url"].trim()) || SHEETS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
 
       // Data Sanitization / Validation
@@ -369,15 +370,16 @@ export async function handlePaymentsProxy(
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-      const targetUrl = (typeof body.url === "string" && body.url.trim()) || PAYMENTS_WEBHOOK_URL;
+      const targetUrl =
+        (typeof body["url"] === "string" && body["url"].trim()) || PAYMENTS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
 
       // Validation
-      if (actionPayload.action === "markPaid") {
+      if (actionPayload["action"] === "markPaid") {
         if (
-          !actionPayload.paymentRef ||
-          typeof actionPayload.paymentRef !== "string" ||
-          actionPayload.paymentRef.trim() === ""
+          !actionPayload["paymentRef"] ||
+          typeof actionPayload["paymentRef"] !== "string" ||
+          actionPayload["paymentRef"].trim() === ""
         ) {
           return jsonResponse({ error: "paymentRef is required" }, 400, {}, request);
         }

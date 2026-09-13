@@ -7,6 +7,7 @@ export interface Registration {
   institution: string;
   track: string;
   teamSize: string;
+  memberNames?: string[];
   brief?: string;
   timestamp: string;
   checkedIn?: boolean;
@@ -181,6 +182,68 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
 /**
  * Syncs deletion to Google Sheets via caching proxy (with direct fallback)
  */
+/**
+ * Syncs team member names to Google Sheets via caching proxy (with direct fallback)
+ */
+export async function syncMemberNamesToRemote(id: string, memberNames: string[]): Promise<boolean> {
+  const webhookUrl = getGoogleSheetsWebhookUrl();
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch("/api/registrations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify({
+        action: "updateMemberNames",
+        id,
+        memberNames: JSON.stringify(memberNames),
+        url: webhookUrl,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("application/json")) {
+      const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+      if (data && data.success !== false) {
+        return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy member names sync failed, trying direct fallback:", proxyErr);
+  }
+
+  // Direct fallback to Google Sheets Webhook
+  if (!webhookUrl) return false;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+
+    await fetch(webhookUrl, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "updateMemberNames",
+        id,
+        memberNames: JSON.stringify(memberNames),
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    return true;
+  } catch (err) {
+    console.warn("Could not sync member names to Google Sheets directly:", err);
+    return false;
+  }
+}
+
 export async function syncDeleteToRemote(id: string): Promise<boolean> {
   const webhookUrl = getGoogleSheetsWebhookUrl();
   try {
@@ -573,6 +636,14 @@ export async function fetchRemoteRegistrations(
         ),
         track: String(item.track || item.Track || item["Threat Sector"] || "General"),
         teamSize: String(item.teamSize || item["Team Size"] || item["Squad Size"] || "4"),
+        memberNames: (() => {
+          const raw = item.memberNames || item["Member Names"];
+          if (Array.isArray(raw)) return raw.map(String);
+          if (typeof raw === "string" && raw.trim() !== "") {
+            return raw.split("\n").map((n) => n.replace(/^\d+\.\s*/, "").trim()).filter(Boolean);
+          }
+          return [];
+        })(),
         brief: String(item.brief || item.Brief || item["Mission Brief"] || ""),
         timestamp: String(
           item.timestamp || item.Timestamp || item["Registered At"] || new Date().toISOString(),
@@ -776,6 +847,7 @@ export function exportRegistrationsToCsv(registrations: Registration[]): void {
     "Institution",
     "Threat Sector",
     "Squad Size",
+    "Member Names",
     "Mission Brief",
     "Registered At",
     "Checked In",
@@ -792,6 +864,7 @@ export function exportRegistrationsToCsv(registrations: Registration[]): void {
     `"${(r.institution || "").replace(/"/g, '""')}"`,
     `"${(r.track || "").replace(/"/g, '""')}"`,
     r.teamSize,
+    `"${(r.memberNames || []).join("; ").replace(/"/g, '""')}"`,
     `"${(r.brief || "").replace(/"/g, '""')}"`,
     r.timestamp
       ? new Date(r.timestamp).toLocaleString("en-GB")

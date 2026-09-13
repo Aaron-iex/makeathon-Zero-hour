@@ -285,14 +285,16 @@ const RegistrationRow = memo(function RegistrationRow({
           >
             Details
           </Button>
-          <button
-            type="button"
-            onClick={() => onDeleteSquad(r.id, r.teamName)}
-            className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded transition-colors"
-            title="Delete Squad from roster & Google Sheets"
-          >
-            <Trash2 className="size-3.5" />
-          </button>
+          {!r.paid && (
+            <button
+              type="button"
+              onClick={() => onDeleteSquad(r.id, r.teamName)}
+              className="p-1.5 text-neutral-500 hover:text-red-400 hover:bg-red-950/30 rounded transition-colors"
+              title="Delete Squad from roster & Google Sheets"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
         </div>
       </td>
     </tr>
@@ -346,6 +348,8 @@ export function AdminDashboard() {
   // Modals
   const [selectedSquad, setSelectedSquad] = useState<Registration | null>(null);
   const [paymentRefInput, setPaymentRefInput] = useState("");
+  const [editingMemberNames, setEditingMemberNames] = useState<string[]>([]);
+  const [isSavingMembers, setIsSavingMembers] = useState(false);
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [confirmUnpaid, setConfirmUnpaid] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -505,7 +509,31 @@ export function AdminDashboard() {
     setSelectedSquad(squad);
     setConfirmUnpaid(false);
     setPaymentRefInput(squad.paymentRef || "");
+    const size = parseInt(squad.teamSize, 10) || 1;
+    const initialNames = [...(squad.memberNames || [])];
+    while (initialNames.length < size) initialNames.push("");
+    setEditingMemberNames(initialNames.slice(0, size));
   }, []);
+
+  const handleSaveMembers = async () => {
+    if (!selectedSquad) return;
+    setIsSavingMembers(true);
+    const updated: Registration = {
+      ...selectedSquad,
+      memberNames: editingMemberNames,
+      lastLocalEdit: Date.now(),
+    };
+    saveRegistrationLocally(updated);
+    setRegistrations((prev) => prev.map((item) => (item.id === selectedSquad.id ? updated : item)));
+    setSelectedSquad(updated);
+    
+    // Sync in background
+    import("../lib/registrations").then(({ syncMemberNamesToRemote }) => {
+      syncMemberNamesToRemote(selectedSquad.id, editingMemberNames).finally(() => {
+        setIsSavingMembers(false);
+      });
+    });
+  };
 
   const handleToggleCheckIn = useCallback((reg: Registration) => {
     const nextCheckIn = !reg.checkedIn;
@@ -546,8 +574,8 @@ export function AdminDashboard() {
       syncPaymentToRemote(reg.id, reg.email, "", reg.leaderName, reg.teamName, false);
     } else {
       // If currently unpaid, open squad detail modal to enter reference ID or mark paid
-      setSelectedSquad(reg);
-      setPaymentRefInput(reg.paymentRef || "");
+      handleSelectSquad(reg);
+
     }
   }, []);
 
@@ -1484,7 +1512,47 @@ export function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+              {/* TEAM MEMBERS (TASK A) */}
+              <div className="pt-2 pb-1 space-y-2 border-b border-neutral-800/50">
+                <label className="flex items-center gap-2 text-[10px] font-mono-tech tracking-widest text-neutral-500 font-bold mb-3">
+                  TEAM MEMBERS ({parseInt(selectedSquad.teamSize, 10) || 1})
+                </label>
+                <div className="space-y-2">
+                  {editingMemberNames.map((name, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={name}
+                      onChange={(e) => {
+                        const newNames = [...editingMemberNames];
+                        newNames[idx] = e.target.value;
+                        setEditingMemberNames(newNames);
+                      }}
+                      placeholder={`Member ${idx + 1} Name`}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-xs font-mono-tech text-white outline-none focus:border-primary placeholder:text-neutral-500"
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-end pt-1 pb-3">
+                  <Button
+                    variant="tactical"
+                    size="sm"
+                    onClick={handleSaveMembers}
+                    disabled={isSavingMembers || JSON.stringify(editingMemberNames) === JSON.stringify(selectedSquad.memberNames || [])}
+                    className="h-8 px-3 font-mono-tech text-[10px] disabled:opacity-50"
+                  >
+                    {isSavingMembers ? (
+                      <>
+                        <RefreshCw className="size-3 mr-1.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Member Names"
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1499,15 +1567,17 @@ export function AdminDashboard() {
                   {selectedSquad.checkedIn ? "Checked In (Click to Undo)" : "Mark as Checked In"}
                 </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDeleteSquad(selectedSquad.id, selectedSquad.teamName)}
-                  className="font-mono-tech text-xs h-9 justify-center text-red-400 border-red-900/40 hover:bg-red-950/40 hover:border-red-800"
-                >
-                  <Trash2 className="size-3.5 mr-1.5 shrink-0" />
-                  Delete Squad
-                </Button>
+                {!selectedSquad.paid && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDeleteSquad(selectedSquad.id, selectedSquad.teamName)}
+                    className="font-mono-tech text-xs h-9 justify-center text-red-400 border-red-900/40 hover:bg-red-950/40 hover:border-red-800"
+                  >
+                    <Trash2 className="size-3.5 mr-1.5 shrink-0" />
+                    Delete Squad
+                  </Button>
+                )}
               </div>
             </div>
           </div>
