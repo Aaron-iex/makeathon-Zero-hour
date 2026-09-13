@@ -41,7 +41,10 @@ function apiDevProxyPlugin(): Plugin {
             const webRequest = new Request(url.href, {
               method: req.method,
               headers,
-              body: req.method !== "GET" && req.method !== "HEAD" ? body : undefined,
+              body:
+                req.method !== "GET" && req.method !== "HEAD"
+                  ? (body as unknown as BodyInit) || null
+                  : null,
             });
 
             const webResponse = url.pathname.startsWith("/api/registrations")

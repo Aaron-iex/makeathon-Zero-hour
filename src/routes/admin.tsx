@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Shield,
   Users,
+  UserCheck,
   CheckCircle2,
   Database,
   Lock,
@@ -533,7 +534,7 @@ export function AdminDashboard() {
       const updated: Registration = {
         ...reg,
         paid: false,
-        paymentRef: undefined,
+
         lastLocalEdit: Date.now(),
       };
       // 1. Instant local update
@@ -598,7 +599,7 @@ export function AdminDashboard() {
     const updated: Registration = {
       ...selectedSquad,
       paid: false,
-      paymentRef: undefined,
+
       lastLocalEdit: Date.now(),
     };
 
@@ -737,6 +738,9 @@ export function AdminDashboard() {
   const metrics = useMemo(() => {
     const totalSquads = registrations.length;
     const totalOperatives = registrations.reduce((acc, r) => acc + (parseInt(r.teamSize) || 1), 0);
+    const checkedInMembers = registrations
+      .filter((r) => r.checkedIn)
+      .reduce((acc, r) => acc + (parseInt(r.teamSize) || 1), 0);
     const checkedInCount = registrations.filter((r) => r.checkedIn).length;
     const paidCount = registrations.filter((r) => r.paid).length;
     const trackCounts: Record<string, number> = {};
@@ -748,7 +752,14 @@ export function AdminDashboard() {
       trackCounts[r.track] = curr + 1;
     });
 
-    return { totalSquads, totalOperatives, checkedInCount, paidCount, trackCounts };
+    return {
+      totalSquads,
+      totalOperatives,
+      checkedInMembers,
+      checkedInCount,
+      paidCount,
+      trackCounts,
+    };
   }, [registrations]);
 
   // 🔒 Passcode Security Gate
@@ -893,7 +904,7 @@ export function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* KPI Metrics Row */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
@@ -910,7 +921,7 @@ export function AdminDashboard() {
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
-                TOTAL MEMBERS
+                MEMBERS REGISTERED
               </span>
               <Users className="size-5 text-accent/70" />
             </div>
@@ -946,6 +957,27 @@ export function AdminDashboard() {
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
+                MEMBERS CHECKED IN
+              </span>
+              <UserCheck className="size-5 text-emerald-400/70" />
+            </div>
+            <p className="font-display text-2xl sm:text-3xl font-black text-emerald-400 mt-2">
+              {metrics.checkedInMembers}{" "}
+              <span className="text-sm font-normal text-neutral-500 font-sans">
+                / {metrics.totalOperatives}
+              </span>
+            </p>
+            <p className="text-[11px] text-neutral-500 mt-1 font-mono-tech">
+              {metrics.totalOperatives > 0
+                ? Math.round((metrics.checkedInMembers / metrics.totalOperatives) * 100)
+                : 0}
+              % of members checked in
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
                 PAID SQUADS
               </span>
               <CreditCard className="size-5 text-accent/70" />
@@ -964,7 +996,7 @@ export function AdminDashboard() {
             </p>
           </div>
 
-          <div className="col-span-2 lg:col-span-1 bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
+          <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="font-mono-tech text-[11px] text-neutral-400 tracking-wider font-semibold">
                 CLOUD CACHE & BACKUP

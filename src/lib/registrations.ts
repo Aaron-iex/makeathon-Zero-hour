@@ -588,10 +588,11 @@ export async function fetchRemoteRegistrations(
       }));
 
       // Pull payment statuses in background / parallel and merge client-side
-      const payments = await fetchPaymentStatuses(undefined, {
-        forceFresh: options?.forceFresh,
-      }).catch(() => ({ success: false, data: {} }));
-      const paymentMap = payments.data || {};
+      const payments = await fetchPaymentStatuses(
+        undefined,
+        options?.forceFresh ? { forceFresh: true } : {},
+      ).catch(() => ({ success: false, data: {} }));
+      const paymentMap: Record<string, { paid?: boolean; paymentRef?: string }> = payments.data || {};
 
       // Merge with local records
       const local = getStoredRegistrations();
