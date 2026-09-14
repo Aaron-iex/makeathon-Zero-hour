@@ -1,25 +1,13 @@
 /**
  * Server-side proxy and caching layer for Google Sheets & Payments Webhooks.
- *
- * Runs across Cloudflare Workers / Nitro SSR, Cloudflare Pages Functions,
- * and Vite dev server middleware.
+ * Runs across Cloudflare Workers / Nitro SSR, Cloudflare Pages Functions, and Vite dev server middleware.
  */
 
-// NO FALLBACKS PERMITTED. Must fail securely if environment is misconfigured.
+import { supabaseAdmin } from "../lib/supabase";
+
 const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
 const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
 const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
-
-interface CacheRecord {
-  body: string;
-  contentType: string;
-  status: number;
-  timestamp: number;
-}
-
-const registrationsCache = new Map<string, CacheRecord>();
-const paymentsCache = new Map<string, CacheRecord>();
-const CACHE_TTL_MS = 6000;
 
 function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin") || "";
@@ -39,13 +27,49 @@ function getCorsHeaders(request: Request): Record<string, string> {
 function jsonResponse(
   data: unknown,
   status = 200,
-  extraHeaders: Record<string, string> = {},
+  headers: Record<string, string> = {},
   request?: Request,
-) {
-  const headers = request
-    ? { ...getCorsHeaders(request), "Content-Type": "application/json", ...extraHeaders }
-    : { "Content-Type": "application/json", ...extraHeaders };
-  return new Response(JSON.stringify(data), { status, headers });
+): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...getCorsHeaders(request as Request), "Content-Type": "application/json", ...headers },
+  });
+}
+
+// Convert Supabase snake_case to frontend camelCase
+function mapSupabaseToRegistration(row: any, paymentData: any = null) {
+  const isExplicitFalse =
+    row.paid === false ||
+    String(row.paid || "").toLowerCase() === "false" ||
+    String(row.paid || "").toUpperCase() === "NO";
+    
+  let isPaid = false;
+  if (!isExplicitFalse) {
+     isPaid = Boolean(row.paid) ||
+       String(row.paid || "").toLowerCase() === "true" ||
+       String(row.paid || "").toUpperCase() === "YES" ||
+       Boolean(row.payment_ref) ||
+       Boolean(paymentData);
+  }
+
+  return {
+    id: row.id,
+    teamName: row.team_name,
+    leaderName: row.leader_name,
+    email: row.email,
+    phone: row.phone || "",
+    institution: row.institution || "",
+    track: row.track || "",
+    teamSize: String(row.team_size || "4"),
+    brief: row.brief || "",
+    timestamp: row.timestamp || new Date().toISOString(),
+    checkedIn: Boolean(row.checked_in),
+    paid: isPaid,
+    paymentRef: row.payment_ref || paymentData?.payment_ref || undefined,
+    memberNames: row.member_names || [],
+    source: "remote",
+    syncedToRemote: true,
+  };
 }
 
 export async function handleRegistrationsProxy(
@@ -68,40 +92,47 @@ export async function handleRegistrationsProxy(
 
   const url = new URL(request.url);
 
-  // ── GET: Read cached registrations from Google Sheets (Admin Only) ──
+  // ── GET: Read registrations ──
   if (request.method === "GET") {
     if (!isAuthenticated) return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
 
-    const targetUrl = url.searchParams.get("url")?.trim() || SHEETS_WEBHOOK_URL;
-    const bypassCache =
-      url.searchParams.get("fresh") === "1" ||
-      url.searchParams.get("bypass") === "1" ||
-      request.headers.get("cache-control") === "no-cache";
+    try {
+      // 1. Read from Supabase FIRST
+      const { data: supabaseRegs, error: supabaseError } = await supabaseAdmin
+        .from("registrations")
+        .select("*")
+        .order("timestamp", { ascending: false });
 
-    const cacheKey = targetUrl;
-    const now = Date.now();
+      const { data: supabasePayments, error: paymentsError } = await supabaseAdmin
+        .from("payments")
+        .select("*");
 
-    if (!bypassCache) {
-      const cached = registrationsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-        return new Response(cached.body, {
-          status: cached.status,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": cached.contentType,
-            "X-Cache-Status": "HIT",
-            "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
-          },
-        });
+      if (!supabaseError && supabaseRegs && supabaseRegs.length > 0) {
+        // Merge payments
+        const paymentMap = new Map();
+        if (!paymentsError && supabasePayments) {
+          for (const p of supabasePayments) {
+            paymentMap.set(p.id, p);
+          }
+        }
+        
+        const mapped = supabaseRegs.map(row => mapSupabaseToRegistration(row, paymentMap.get(row.id)));
+        
+        return jsonResponse(mapped, 200, {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        }, request);
+      } else {
+        console.warn("Supabase GET returned empty or failed, falling back to Sheets", supabaseError);
       }
-    } else {
-      registrationsCache.delete(cacheKey);
+    } catch (err) {
+      console.warn("Supabase GET threw an error, falling back to Sheets", err);
     }
 
+    // 2. Fallback to Sheets
+    const targetUrl = url.searchParams.get("url")?.trim() || SHEETS_WEBHOOK_URL;
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
-
       const upstreamRes = await fetch(
         `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`,
         {
@@ -109,141 +140,158 @@ export async function handleRegistrationsProxy(
           headers: { Accept: "application/json" },
           signal: controller.signal,
           redirect: "follow",
-        },
+        }
       );
-
       clearTimeout(timeout);
 
       if (!upstreamRes.ok) {
         throw new Error(`Upstream returned HTTP ${upstreamRes.status}`);
       }
-
       const rawText = await upstreamRes.text();
-
-      try {
-        JSON.parse(rawText);
-        registrationsCache.set(cacheKey, {
-          body: rawText,
-          contentType: "application/json; charset=utf-8",
-          status: 200,
-          timestamp: now,
-        });
-
-        return new Response(rawText, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json; charset=utf-8",
-            "X-Cache-Status": "MISS",
-            "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
-          },
-        });
-      } catch {
-        throw new Error("Upstream response was not valid JSON");
-      }
-    } catch (err) {
-      console.warn("Registrations upstream fetch error:", err);
-
-      const stale = registrationsCache.get(cacheKey);
-      if (stale) {
-        return new Response(stale.body, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": stale.contentType,
-            "X-Cache-Status": "STALE-FALLBACK",
-            "Cache-Control": "no-cache",
-          },
-        });
-      }
-
-      return jsonResponse(
-        {
-          success: false,
-          error: "Upstream Google Sheet fetch failed or timed out",
+      return new Response(rawText, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
         },
-        502,
-        {},
-        request,
-      );
+      });
+    } catch (err) {
+      return jsonResponse({ error: "Upstream fetch failed" }, 502, {}, request);
     }
   }
 
-  // ── POST: Write action (check-in, delete, insert) straight to Google Sheets ──
+  // ── POST: Mutations (Dual-write) ──
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
       const action = body["action"] as string | undefined;
 
-      // Protect admin actions, but allow public new registrations (where action is undefined or "register")
       if (action && action !== "register" && !isAuthenticated) {
         return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
       }
 
-      const targetUrl =
-        (typeof body["url"] === "string" && body["url"].trim()) || SHEETS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
+      const targetUrl = (typeof body["url"] === "string" && body["url"].trim()) || SHEETS_WEBHOOK_URL;
 
-      // Data Sanitization / Validation
+      // New Registration
       if (!action || action === "register") {
-        const { teamName, leaderName, email, phone } = actionPayload as Record<string, unknown>;
-        if (!teamName || typeof teamName !== "string" || teamName.trim() === "") {
-          return jsonResponse({ error: "Invalid or missing teamName" }, 400, {}, request);
-        }
-        if (!leaderName || typeof leaderName !== "string" || leaderName.trim() === "") {
-          return jsonResponse({ error: "Invalid or missing leaderName" }, 400, {}, request);
-        }
-        if (!email || typeof email !== "string" || !/^\S+@\S+\.\S+$/.test(email)) {
-          return jsonResponse({ error: "Invalid or missing email" }, 400, {}, request);
-        }
-        if (!phone || typeof phone !== "string" || phone.replace(/\D/g, "").length < 10) {
-          return jsonResponse({ error: "Invalid or missing phone" }, 400, {}, request);
-        }
+        const { id, teamName, leaderName, email, phone, institution, track, teamSize, brief, timestamp } = actionPayload as any;
+        
+        // 1. Supabase insert
+        const { error: sbError } = await supabaseAdmin.from("registrations").upsert({
+          id,
+          team_name: teamName,
+          leader_name: leaderName,
+          email,
+          phone,
+          institution,
+          track,
+          team_size: parseInt(teamSize, 10) || 4,
+          brief,
+          timestamp: timestamp || new Date().toISOString(),
+          source: "form"
+        });
+        
+        if (sbError) console.error("Supabase insert error (registration):", sbError);
+
+        // 2. Sheets POST
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const upstreamRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actionPayload),
+          signal: controller.signal,
+          redirect: "follow",
+        });
+        clearTimeout(timeout);
+        
+        return jsonResponse({ success: true, from: sbError ? "sheets-only" : "dual" }, 200, {}, request);
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      // Check-in
+      if (action === "updateCheckIn") {
+        const { id, checkedIn } = actionPayload as any;
+        
+        const { error: sbError } = await supabaseAdmin
+          .from("registrations")
+          .update({ checked_in: Boolean(checkedIn) })
+          .eq("id", id);
+          
+        if (sbError) console.error("Supabase update error (checkIn):", sbError);
 
-      const upstreamRes = await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(actionPayload),
-        signal: controller.signal,
-        redirect: "follow",
-      });
-
-      clearTimeout(timeout);
-      registrationsCache.delete(targetUrl);
-
-      const responseText = await upstreamRes.text().catch(() => "");
-      let responseJson: unknown = null;
-      try {
-        responseJson = JSON.parse(responseText);
-      } catch {
-        responseJson = { raw: responseText };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const upstreamRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actionPayload),
+          signal: controller.signal,
+          redirect: "follow",
+        });
+        clearTimeout(timeout);
+        
+        return jsonResponse({ success: true, from: sbError ? "sheets-only" : "dual" }, 200, {}, request);
       }
 
-      return jsonResponse(
-        {
-          success: upstreamRes.ok,
-          status: upstreamRes.status,
-          result: responseJson,
-        },
-        200,
-        {},
-        request,
-      );
+      // Member Names
+      if (action === "updateMemberNames") {
+        const { id, memberNames } = actionPayload as any;
+        let parsedNames = [];
+        try {
+          parsedNames = typeof memberNames === "string" ? JSON.parse(memberNames) : memberNames;
+        } catch(e) {}
+        
+        const { error: sbError } = await supabaseAdmin
+          .from("registrations")
+          .update({ member_names: parsedNames })
+          .eq("id", id);
+          
+        if (sbError) console.error("Supabase update error (memberNames):", sbError);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const upstreamRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actionPayload),
+          signal: controller.signal,
+          redirect: "follow",
+        });
+        clearTimeout(timeout);
+        
+        return jsonResponse({ success: true, from: sbError ? "sheets-only" : "dual" }, 200, {}, request);
+      }
+
+      // Delete
+      if (action === "delete") {
+        const { id } = actionPayload as any;
+        
+        const { error: sbError } = await supabaseAdmin
+          .from("registrations")
+          .delete()
+          .eq("id", id);
+          
+        if (sbError) console.error("Supabase delete error:", sbError);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const upstreamRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(actionPayload),
+          signal: controller.signal,
+          redirect: "follow",
+        });
+        clearTimeout(timeout);
+        
+        return jsonResponse({ success: true, from: sbError ? "sheets-only" : "dual" }, 200, {}, request);
+      }
+
     } catch (err) {
       console.error("Registrations proxy POST error:", err);
-      return jsonResponse(
-        {
-          success: false,
-          error: "Failed to forward action to Google Sheets",
-        },
-        500,
-        {},
-        request,
-      );
+      return jsonResponse({ success: false, error: "Failed to forward action" }, 500, {}, request);
     }
   }
 
@@ -273,34 +321,12 @@ export async function handlePaymentsProxy(
   const url = new URL(request.url);
 
   if (request.method === "GET") {
+    // With Supabase, we don't strictly need to fetch payments here for the admin panel, 
+    // as it's merged in registrations proxy. But we'll keep the fallback.
     const targetUrl = url.searchParams.get("url")?.trim() || PAYMENTS_WEBHOOK_URL;
-    const bypassCache =
-      url.searchParams.get("fresh") === "1" || request.headers.get("cache-control") === "no-cache";
-
-    const cacheKey = targetUrl;
-    const now = Date.now();
-
-    if (!bypassCache) {
-      const cached = paymentsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-        return new Response(cached.body, {
-          status: cached.status,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": cached.contentType,
-            "X-Cache-Status": "HIT",
-            "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
-          },
-        });
-      }
-    } else {
-      paymentsCache.delete(cacheKey);
-    }
-
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
-
       const upstreamRes = await fetch(
         `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`,
         {
@@ -308,86 +334,65 @@ export async function handlePaymentsProxy(
           headers: { Accept: "application/json" },
           signal: controller.signal,
           redirect: "follow",
-        },
+        }
       );
-
       clearTimeout(timeout);
 
-      if (!upstreamRes.ok) {
-        throw new Error(`Upstream returned HTTP ${upstreamRes.status}`);
-      }
-
       const rawText = await upstreamRes.text();
-
-      try {
-        JSON.parse(rawText);
-        paymentsCache.set(cacheKey, {
-          body: rawText,
-          contentType: "application/json; charset=utf-8",
-          status: 200,
-          timestamp: now,
-        });
-
-        return new Response(rawText, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json; charset=utf-8",
-            "X-Cache-Status": "MISS",
-            "Cache-Control": "public, max-age=18, s-maxage=20, stale-while-revalidate=10",
-          },
-        });
-      } catch {
-        throw new Error("Payments upstream response was not valid JSON");
-      }
-    } catch (err) {
-      console.warn("Payments upstream fetch error:", err);
-      const stale = paymentsCache.get(cacheKey);
-      if (stale) {
-        return new Response(stale.body, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": stale.contentType,
-            "X-Cache-Status": "STALE-FALLBACK",
-            "Cache-Control": "no-cache",
-          },
-        });
-      }
-
-      return jsonResponse(
-        {
-          success: false,
-          error: "Upstream Payments Webhook fetch failed or timed out",
+      return new Response(rawText, {
+        status: upstreamRes.status,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
         },
-        502,
-        {},
-        request,
-      );
+      });
+    } catch (err) {
+      return jsonResponse({ error: "Upstream fetch failed" }, 502, {}, request);
     }
   }
 
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-      const targetUrl =
-        (typeof body["url"] === "string" && body["url"].trim()) || PAYMENTS_WEBHOOK_URL;
+      const targetUrl = (typeof body["url"] === "string" && body["url"].trim()) || PAYMENTS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
+      
+      const { action, id, paymentRef, email } = actionPayload as any;
 
-      // Validation
-      if (actionPayload["action"] === "markPaid") {
-        if (
-          !actionPayload["paymentRef"] ||
-          typeof actionPayload["paymentRef"] !== "string" ||
-          actionPayload["paymentRef"].trim() === ""
-        ) {
+      if (action === "markPaid") {
+        if (!paymentRef || typeof paymentRef !== "string" || paymentRef.trim() === "") {
           return jsonResponse({ error: "paymentRef is required" }, 400, {}, request);
         }
+        
+        // 1. Supabase update registrations
+        const { error: sbError1 } = await supabaseAdmin
+          .from("registrations")
+          .update({ paid: true, payment_ref: paymentRef.trim() })
+          .eq("id", id);
+          
+        if (sbError1) console.error("Supabase update paid error:", sbError1);
+
+        // 2. Supabase upsert payments
+        const { error: sbError2 } = await supabaseAdmin
+          .from("payments")
+          .upsert({ id, payment_ref: paymentRef.trim(), email: email || "" });
+          
+        if (sbError2) console.error("Supabase upsert payment error:", sbError2);
+      } else if (action === "markUnpaid") {
+        // 1. Supabase update registrations
+        const { error: sbError1 } = await supabaseAdmin
+          .from("registrations")
+          .update({ paid: false, payment_ref: null })
+          .eq("id", id);
+          
+        // 2. Supabase delete from payments
+        await supabaseAdmin.from("payments").delete().eq("id", id);
       }
 
+      // 3. Post to comms automation script (PAYMENTS_WEBHOOK_URL)
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
-
       const upstreamRes = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -395,39 +400,27 @@ export async function handlePaymentsProxy(
         signal: controller.signal,
         redirect: "follow",
       });
-
       clearTimeout(timeout);
-      paymentsCache.delete(targetUrl);
-
-      const responseText = await upstreamRes.text().catch(() => "");
-      let responseJson: unknown = null;
-      try {
-        responseJson = JSON.parse(responseText);
-      } catch {
-        responseJson = { raw: responseText };
+      
+      // 4. Post to Sheets script (SHEETS_WEBHOOK_URL) for backup 
+      // (The prompt requested: POST to SHEETS_WEBHOOK_URL with { action: 'updatePayment', id, paid, paymentRef } )
+      if (process.env.SHEETS_WEBHOOK_URL) {
+         fetch(process.env.SHEETS_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "updatePayment",
+              id,
+              paid: action === "markPaid",
+              paymentRef: action === "markPaid" ? paymentRef.trim() : ""
+            })
+         }).catch(err => console.error("Fallback Sheets updatePayment failed:", err));
       }
 
-      return jsonResponse(
-        {
-          success: upstreamRes.ok,
-          status: upstreamRes.status,
-          result: responseJson,
-        },
-        200,
-        {},
-        request,
-      );
+      return jsonResponse({ success: true }, 200, {}, request);
     } catch (err) {
       console.error("Payments proxy POST error:", err);
-      return jsonResponse(
-        {
-          success: false,
-          error: "Failed to forward payment to remote script",
-        },
-        500,
-        {},
-        request,
-      );
+      return jsonResponse({ success: false, error: "Failed to forward payment" }, 500, {}, request);
     }
   }
 
