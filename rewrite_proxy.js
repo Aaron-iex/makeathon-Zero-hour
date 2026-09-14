@@ -1,4 +1,6 @@
-/**
+import fs from 'fs';
+
+const code = `/**
  * Server-side proxy and caching layer for Google Sheets & Payments Webhooks.
  * Runs across Cloudflare Workers / Nitro SSR, Cloudflare Pages Functions, and Vite dev server middleware.
  */
@@ -50,7 +52,7 @@ export async function handleRegistrationsProxy(
   }
 
   const authHeader = request.headers.get("Authorization");
-  const isAuthenticated = authHeader === `Bearer ${ADMIN_SECRET_TOKEN}`;
+  const isAuthenticated = authHeader === \`Bearer \${ADMIN_SECRET_TOKEN}\`;
 
   const url = new URL(request.url);
 
@@ -63,7 +65,7 @@ export async function handleRegistrationsProxy(
       const timeout = setTimeout(() => controller.abort(), 12000);
       
       const upstreamRes = await fetch(
-        `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`,
+        \`\${targetUrl}\${targetUrl.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
         {
           method: "GET",
           headers: { Accept: "application/json" },
@@ -76,7 +78,7 @@ export async function handleRegistrationsProxy(
       if (PAYMENTS_WEBHOOK_URL) {
          try {
             const pRes = await fetch(
-              `${PAYMENTS_WEBHOOK_URL}${PAYMENTS_WEBHOOK_URL.includes("?") ? "&" : "?"}_t=${Date.now()}`,
+              \`\${PAYMENTS_WEBHOOK_URL}\${PAYMENTS_WEBHOOK_URL.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
               { method: "GET", headers: { Accept: "application/json" } }
             );
             if (pRes.ok) {
@@ -88,7 +90,7 @@ export async function handleRegistrationsProxy(
       clearTimeout(timeout);
 
       if (!upstreamRes.ok) {
-        throw new Error(`Upstream returned HTTP ${upstreamRes.status}`);
+        throw new Error(\`Upstream returned HTTP \${upstreamRes.status}\`);
       }
       
       const rawText = await upstreamRes.text();
@@ -119,7 +121,7 @@ export async function handleRegistrationsProxy(
         
         // Map Registrations
         const mapped = json.map(item => {
-           const id = String(item.id || item.ID || item["Pass ID"] || `ZH-${Math.floor(100000 + Math.random() * 900000)}`);
+           const id = String(item.id || item.ID || item["Pass ID"] || \`ZH-\${Math.floor(100000 + Math.random() * 900000)}\`);
            const payInfo = paymentMap.get(id) || {};
            
            return {
@@ -135,7 +137,7 @@ export async function handleRegistrationsProxy(
                 const raw = item.memberNames || item["Member Names"];
                 if (Array.isArray(raw)) return raw.map(String);
                 if (typeof raw === "string" && raw.trim() !== "") {
-                  return raw.split("\n").map((n: string) => n.replace(/^\d+\.\s*/, "").trim()).filter(Boolean);
+                  return raw.split("\\n").map((n: string) => n.replace(/^\\d+\\.\\s*/, "").trim()).filter(Boolean);
                 }
                 return [];
              })(),
@@ -213,7 +215,7 @@ export async function handlePaymentsProxy(
   }
 
   const authHeader = request.headers.get("Authorization");
-  if (!authHeader || authHeader !== `Bearer ${ADMIN_SECRET_TOKEN}`) {
+  if (!authHeader || authHeader !== \`Bearer \${ADMIN_SECRET_TOKEN}\`) {
     return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
   }
 
@@ -225,7 +227,7 @@ export async function handlePaymentsProxy(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
       const upstreamRes = await fetch(
-        `${targetUrl}${targetUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`,
+        \`\${targetUrl}\${targetUrl.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
         {
           method: "GET",
           headers: { Accept: "application/json" },
@@ -295,3 +297,6 @@ export async function handlePaymentsProxy(
 
   return jsonResponse({ error: "Method not allowed" }, 405, {}, request);
 }
+`;
+fs.writeFileSync('src/server/proxy-handlers.ts', code);
+console.log("Rewrote src/server/proxy-handlers.ts");

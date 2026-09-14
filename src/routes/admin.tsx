@@ -14,7 +14,6 @@ import {
   type Registration,
 } from "@/lib/registrations";
 import { TRACKS } from "@/data/zeroth";
-import { supabaseClient } from "@/lib/supabase";
 import {
   Download,
   Link as LinkIcon,
@@ -300,41 +299,6 @@ const RegistrationRow = memo(function RegistrationRow({
 const PIN_STORAGE_KEY = "zeroth_admin_pin";
 const AUTH_SESSION_KEY = "zeroth_admin_auth";
 
-function mapSupabasePayloadToRegistration(row: any, existing: Registration): Registration {
-  const isExplicitFalse =
-    row.paid === false ||
-    String(row.paid || "").toLowerCase() === "false" ||
-    String(row.paid || "").toUpperCase() === "NO";
-    
-  let isPaid = false;
-  if (!isExplicitFalse) {
-     isPaid = Boolean(row.paid) ||
-       String(row.paid || "").toLowerCase() === "true" ||
-       String(row.paid || "").toUpperCase() === "YES" ||
-       Boolean(row.payment_ref);
-  }
-
-  return {
-    ...existing,
-    id: row.id || existing.id,
-    teamName: row.team_name || existing.teamName,
-    leaderName: row.leader_name || existing.leaderName,
-    email: row.email || existing.email,
-    phone: row.phone || existing.phone,
-    institution: row.institution || existing.institution,
-    track: row.track || existing.track,
-    teamSize: String(row.team_size || existing.teamSize || "4"),
-    brief: row.brief || existing.brief,
-    timestamp: row.timestamp || existing.timestamp,
-    checkedIn: row.checked_in !== undefined ? Boolean(row.checked_in) : existing.checkedIn,
-    paid: isPaid,
-    paymentRef: row.payment_ref || existing.paymentRef,
-    memberNames: row.member_names || existing.memberNames,
-    source: "remote",
-    syncedToRemote: true,
-  };
-}
-
 export function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== "undefined") {
@@ -458,10 +422,10 @@ export function AdminDashboard() {
   };
 
   // Initial fetch from proxy (which calls Supabase, falls back to Sheets)
-  const fetchRegistrations = useCallback(async () => {
+  const fetchRegistrations = useCallback(async (isInitial = false) => {
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
-    setIsSyncing(true);
+    if (isInitial || registrations.length === 0) setIsSyncing(true);
     try {
       const token = sessionStorage.getItem("zeroth_admin_token");
       const res = await fetch("/api/registrations", {
@@ -492,96 +456,20 @@ export function AdminDashboard() {
   }, []);
 
   // Sync Live button alias
-  const handleSyncRemote = useCallback(async () => {
-    await fetchRegistrations();
+  const handleSyncRemote = useCallback(async (isInitial = true) => {
+    await fetchRegistrations(isInitial);
   }, [fetchRegistrations]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    fetchRegistrations(true); // initial fetch
 
-    fetchRegistrations();
-
-    // Supabase Realtime Subscription
-    const channel = supabaseClient
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'payments',
-        },
-        (payload) => {
-          console.log('Real-time payment payload:', payload);
-          setRegistrations((prev) => {
-             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                return prev.map(r => {
-                  if (r.id === payload.new.id) {
-                     const updated = { ...r, paid: true, paymentRef: payload.new.payment_ref, lastLocalEdit: Date.now() };
-                     saveRegistrationLocally(updated);
-                     return updated;
-                  }
-                  return r;
-                });
-             }
-             if (payload.eventType === 'DELETE') {
-                return prev.map(r => {
-                  if (r.id === payload.old.id) {
-                     const updated = { ...r, paid: false, paymentRef: undefined, lastLocalEdit: Date.now() };
-                     saveRegistrationLocally(updated);
-                     return updated;
-                  }
-                  return r;
-                });
-             }
-             return prev;
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'registrations',
-        },
-        (payload) => {
-          console.log('Real-time payload received:', payload);
-          setRegistrations((prev) => {
-            if (payload.eventType === 'INSERT') {
-               const exists = prev.find(r => r.id === payload.new.id);
-               if (exists) return prev;
-               // Need to construct a full registration if it's new
-               const newReg = mapSupabasePayloadToRegistration(payload.new, {} as Registration);
-               const next = [...prev, newReg];
-               saveRegistrationLocally(newReg);
-               return next;
-            }
-            if (payload.eventType === 'UPDATE') {
-               const next = prev.map(r => {
-                 if (r.id === payload.new.id) {
-                   const updated = mapSupabasePayloadToRegistration(payload.new, r);
-                   saveRegistrationLocally(updated);
-                   return updated;
-                 }
-                 return r;
-               });
-               return next;
-            }
-            if (payload.eventType === 'DELETE') {
-               const next = prev.filter(r => r.id !== payload.old.id);
-               deleteRegistrationLocally(payload.old.id);
-               return next;
-            }
-            return prev;
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabaseClient.removeChannel(channel);
-    };
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchRegistrations(false);
+      }
+    }, 25000);
+    return () => clearInterval(interval);
   }, [isAuthenticated, fetchRegistrations]);
 
   const handleSelectSquad = useCallback((squad: Registration) => {
