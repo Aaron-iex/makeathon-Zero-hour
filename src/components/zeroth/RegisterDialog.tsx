@@ -140,8 +140,8 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
       clearState(STORAGE_KEYS.REGISTRATION_DRAFT);
       setDraftRestored(false);
     } catch (err) {
-      console.error(err);
-      window.location.href = BACKUP_GOOGLE_FORM_URL;
+      console.error("Submission failed:", err);
+      alert("There was a localized error submitting the form. Please try again or use the fallback form.");
     } finally {
       setIsSubmitting(false);
     }
