@@ -10,11 +10,6 @@ import {
   setGoogleSheetsWebhookUrl,
   getPaymentsWebhookUrl,
   setPaymentsWebhookUrl,
-  fetchRemoteRegistrations,
-  clearStoredRegistrations,
-  syncCheckInToRemote,
-  syncDeleteToRemote,
-  syncPaymentToRemote,
   BACKUP_GOOGLE_FORM_URL,
   type Registration,
 } from "@/lib/registrations";
@@ -351,13 +346,8 @@ export function AdminDashboard() {
   const [pinError, setPinError] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // Render stored registrations IMMEDIATELY on load (0ms UI paint, non-blocking)
-  const [registrations, setRegistrations] = useState<Registration[]>(() => {
-    if (typeof window !== "undefined") {
-      return getStoredRegistrations();
-    }
-    return [];
-  });
+  // Wait for Supabase load
+  const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [webhookUrl, setWebhookUrl] = useState(() => {
     if (typeof window !== "undefined") {
       return getGoogleSheetsWebhookUrl();
@@ -428,38 +418,6 @@ export function AdminDashboard() {
   const isSyncingRef = useRef(false);
   const isAutoRefreshingRef = useRef(false);
 
-  // Manual Sync (can bypass short cache)
-  const handleSyncRemote = useCallback(
-    async (forceFresh = false) => {
-      const isFresh = Boolean(forceFresh && typeof forceFresh === "boolean");
-      if (isSyncingRef.current) return;
-      isSyncingRef.current = true;
-      setIsSyncing(true);
-      try {
-        const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
-        if (res.success && res.data) {
-          setRegistrations(res.data);
-        } else {
-          loadData();
-        }
-        setLastSyncTime(
-          new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          }),
-        );
-      } catch (err) {
-        console.warn("Sync error:", err);
-        loadData();
-      } finally {
-        isSyncingRef.current = false;
-        setIsSyncing(false);
-      }
-    },
-    [webhookUrl, loadData],
-  );
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
@@ -478,8 +436,7 @@ export function AdminDashboard() {
         sessionStorage.setItem(AUTH_SESSION_KEY, "true");
         sessionStorage.setItem("zeroth_admin_token", data.token);
         // Clean stale browser storage on login and sync fresh from Google Sheets
-        clearStoredRegistrations();
-        setRegistrations([]);
+                setRegistrations([]);
         await handleSyncRemote(true);
       } else {
         setPinError(true);
@@ -493,24 +450,30 @@ export function AdminDashboard() {
   };
 
   const handleLogout = () => {
-    clearStoredRegistrations();
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
+        sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem("zeroth_admin_token");
     setIsAuthenticated(false);
     setRegistrations([]);
     setPinInput("");
   };
 
-  // Gentle auto-refresh against cached proxy endpoint every 25 seconds
-  const handleGentleAutoRefresh = useCallback(async () => {
-    if (isSyncingRef.current || isAutoRefreshingRef.current) return;
-    isAutoRefreshingRef.current = true;
-    setIsAutoRefreshing(true);
+  // Initial fetch from proxy (which calls Supabase, falls back to Sheets)
+  const fetchRegistrations = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    isSyncingRef.current = true;
+    setIsSyncing(true);
     try {
-      const res = await fetchRemoteRegistrations(webhookUrl);
-      if (res.success && res.data) {
-        setRegistrations(res.data);
-      }
+      const token = sessionStorage.getItem("zeroth_admin_token");
+      const res = await fetch("/api/registrations", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Failed to fetch registrations");
+      const data = await res.json();
+      setRegistrations(data);
+      
+      // Store stale fallback
+      try { sessionStorage.setItem("zeroth_registrations_cache", JSON.stringify(data)); } catch (e) {}
+      
       setLastSyncTime(
         new Date().toLocaleTimeString([], {
           hour: "2-digit",
@@ -519,23 +482,62 @@ export function AdminDashboard() {
         }),
       );
     } catch (err) {
-      console.warn("Gentle auto-refresh warning:", err);
+      console.warn("Fetch failed, falling back to local storage", err);
+      const fallback = getStoredRegistrations();
+      if (fallback.length > 0) setRegistrations(fallback);
     } finally {
-      isAutoRefreshingRef.current = false;
-      setIsAutoRefreshing(false);
+      isSyncingRef.current = false;
+      setIsSyncing(false);
     }
-  }, [webhookUrl]);
+  }, []);
 
-  // Initial background fetch on mount + interval timer (non-blocking)
+  // Sync Live button alias
+  const handleSyncRemote = useCallback(async () => {
+    await fetchRegistrations();
+  }, [fetchRegistrations]);
+
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Fetch fresh data in background immediately; UI already shows cached registrations
-    handleGentleAutoRefresh();
+    fetchRegistrations();
 
     // Supabase Realtime Subscription
     const channel = supabaseClient
       .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'payments',
+        },
+        (payload) => {
+          console.log('Real-time payment payload:', payload);
+          setRegistrations((prev) => {
+             if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                return prev.map(r => {
+                  if (r.id === payload.new.id) {
+                     const updated = { ...r, paid: true, paymentRef: payload.new.payment_ref, lastLocalEdit: Date.now() };
+                     saveRegistrationLocally(updated);
+                     return updated;
+                  }
+                  return r;
+                });
+             }
+             if (payload.eventType === 'DELETE') {
+                return prev.map(r => {
+                  if (r.id === payload.old.id) {
+                     const updated = { ...r, paid: false, paymentRef: undefined, lastLocalEdit: Date.now() };
+                     saveRegistrationLocally(updated);
+                     return updated;
+                  }
+                  return r;
+                });
+             }
+             return prev;
+          });
+        }
+      )
       .on(
         'postgres_changes',
         {
@@ -580,7 +582,7 @@ export function AdminDashboard() {
     return () => {
       supabaseClient.removeChannel(channel);
     };
-  }, [isAuthenticated, handleGentleAutoRefresh]);
+  }, [isAuthenticated, fetchRegistrations]);
 
   const handleSelectSquad = useCallback((squad: Registration) => {
     setSelectedSquad(squad);
@@ -604,11 +606,20 @@ export function AdminDashboard() {
     setRegistrations((prev) => prev.map((item) => (item.id === selectedSquad.id ? updated : item)));
     setSelectedSquad(updated);
     
-    // Sync in background
-    import("../lib/registrations").then(({ syncMemberNamesToRemote }) => {
-      syncMemberNamesToRemote(selectedSquad.id, editingMemberNames).finally(() => {
-        setIsSavingMembers(false);
-      });
+    // Sync in background via proxy
+    fetch("/api/registrations", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${sessionStorage.getItem("zeroth_admin_token")}`
+      },
+      body: JSON.stringify({
+        action: "updateMemberNames",
+        id: selectedSquad.id,
+        memberNames: JSON.stringify(editingMemberNames)
+      })
+    }).finally(() => {
+      setIsSavingMembers(false);
     });
   };
 
@@ -676,14 +687,22 @@ export function AdminDashboard() {
     // 2. Sync in background via payments proxy
     setIsMarkingPaid(true);
     try {
-      await syncPaymentToRemote(
-        updated.id,
-        updated.email,
-        trimmedRef,
-        updated.leaderName,
-        updated.teamName,
-        true,
-      );
+      await fetch("/api/payments", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${sessionStorage.getItem("zeroth_admin_token")}`
+        },
+        body: JSON.stringify({
+          action: "markPaid",
+          id: updated.id,
+          email: updated.email,
+          paymentRef: trimmedRef,
+          leaderName: updated.leaderName,
+          teamName: updated.teamName,
+          paid: true
+        })
+      });
     } catch (err) {
       console.warn("Payment sync error:", err);
     } finally {
