@@ -200,7 +200,7 @@ export async function syncMemberNamesToRemote(id: string, memberNames: string[])
       body: JSON.stringify({
         action: "updateMemberNames",
         id,
-        memberNames: JSON.stringify(memberNames),
+        memberNames: memberNames,
         url: webhookUrl,
       }),
       signal: controller.signal,
@@ -231,7 +231,7 @@ export async function syncMemberNamesToRemote(id: string, memberNames: string[])
       body: JSON.stringify({
         action: "updateMemberNames",
         id,
-        memberNames: JSON.stringify(memberNames),
+        memberNames: memberNames,
       }),
       signal: controller.signal,
     });
