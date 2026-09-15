@@ -86,7 +86,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
     }
 
     // 2. Add history entry for dialog back-button closing
-    if (window.location.hash !== "#register") {
+    if (!REGISTRATION_CLOSED && window.location.hash !== "#register") {
       window.history.pushState({ modal: "register" }, "", "#register");
     }
   }, [open, initialTrack]);
@@ -149,6 +149,51 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
   };
 
   if (!open || !mounted) return null;
+
+  if (REGISTRATION_CLOSED) {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-50 bg-background/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Registrations Closed"
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div className="panel-tactical w-full max-w-md p-6 sm:p-8 text-center border-2 border-primary shadow-[0_0_50px_rgba(224,76,17,0.4)] animate-in fade-in zoom-in-95 duration-200">
+          <div className="mx-auto size-12 place-items-center border-2 border-primary/60 bg-primary/15 font-display text-primary flex items-center justify-center clip-tactical mb-5">
+            <X className="size-6 text-primary" aria-hidden />
+          </div>
+
+          <h2 className="font-display text-xl sm:text-2xl font-black uppercase text-foreground tracking-wider">
+            REGISTRATIONS CLOSED
+          </h2>
+
+          <div className="mt-4 space-y-3 font-mono-tech text-xs sm:text-sm text-muted-foreground">
+            <p className="text-foreground font-semibold">
+              Squad enrollment for Zeroth Hour has ended.
+              <br />
+              We have reached full capacity.
+            </p>
+            <p className="text-accent text-[11px] sm:text-xs pt-1 font-bold">
+              See you on Sept 23 at Jaya Auditorium. Reporting time: 08:30 IST.
+            </p>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-border/80">
+            <Button
+              variant="tactical"
+              size="lg"
+              className="w-full font-mono-tech text-xs uppercase tracking-widest min-h-[44px]"
+              onClick={onClose}
+            >
+              CLOSE
+            </Button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
 
   const copy = async () => {
     if (!submission?.id) return;

@@ -517,7 +517,7 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
                 SEPT 23 // 5-HOUR MAKEATHON
               </p>
               <p className="font-mono-tech text-[9px] sm:text-[11px] text-white/90 font-medium truncate">
-                Venue: Jaya Auditorium · Registration queue open
+                Venue: Jaya Auditorium · {REGISTRATION_CLOSED ? "Registrations closed" : "Registration queue open"}
               </p>
             </div>
           </motion.div>

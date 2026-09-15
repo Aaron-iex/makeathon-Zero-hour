@@ -256,15 +256,21 @@ export function Roadmap({
               ₹200 per squad. Open to students, researchers, and builders. Secure your clearance
               badge before squad lockdown.
             </p>
-            <Button
-              variant="alert"
-              size="xl"
-              onClick={onRegister}
-              className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:-translate-y-0.5 transition-all duration-300"
-            >
-              <Flame className="size-4" aria-hidden />
-              Secure squad clearance
-            </Button>
+            {REGISTRATION_CLOSED ? (
+              <div className="inline-flex items-center justify-center h-12 px-8 font-mono-tech font-bold text-sm bg-neutral-900 border border-neutral-800 text-neutral-500 uppercase tracking-widest clip-tactical select-none">
+                REGISTRATIONS CLOSED
+              </div>
+            ) : (
+              <Button
+                variant="alert"
+                size="xl"
+                onClick={onRegister}
+                className="group min-h-[44px] hover:shadow-[0_0_30px_rgba(224,76,17,0.5)] hover:-translate-y-0.5 transition-all duration-300"
+              >
+                <Flame className="size-4" aria-hidden />
+                Secure squad clearance
+              </Button>
+            )}
           </div>
         </motion.div>
       </div>

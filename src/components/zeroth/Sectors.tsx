@@ -510,19 +510,25 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
                 </Button>
 
                 {/* Register Button */}
-                <Button
-                  variant="alert"
-                  size="default"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRegister(track.title);
-                  }}
-                  className="w-full sm:w-auto flex-1 min-h-[44px] px-3.5 font-mono-tech text-xs tracking-[0.14em] font-bold touch-manipulation"
-                  aria-label={`Register for ${track.title}`}
-                >
-                  <span>Register</span>
-                  <ChevronRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
-                </Button>
+                {REGISTRATION_CLOSED ? (
+                  <div className="w-full sm:w-auto flex-1 min-h-[44px] px-3.5 font-mono-tech text-xs tracking-[0.14em] font-bold bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase select-none clip-tactical">
+                    CLOSED
+                  </div>
+                ) : (
+                  <Button
+                    variant="alert"
+                    size="default"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRegister(track.title);
+                    }}
+                    className="w-full sm:w-auto flex-1 min-h-[44px] px-3.5 font-mono-tech text-xs tracking-[0.14em] font-bold touch-manipulation"
+                    aria-label={`Register for ${track.title}`}
+                  >
+                    <span>Register</span>
+                    <ChevronRight className="size-4 transition-transform duration-300 group-hover:translate-x-1" />
+                  </Button>
+                )}
               </div>
 
               {/* Protocol ID telemetry stamp */}
@@ -651,17 +657,23 @@ export function Sectors({ onRegister }: { onRegister: (track: string) => void })
                       ← RETURN TO CRISIS LIST
                     </Button>
 
-                    <Button
-                      variant="alert"
-                      onClick={() => {
-                        const title = selectedTrack.title;
-                        handleCloseModal();
-                        onRegister(title);
-                      }}
-                      className="w-full sm:w-auto min-h-[44px] font-bold tracking-wider cursor-pointer"
-                    >
-                      REGISTER FOR THIS CRISIS →
-                    </Button>
+                    {REGISTRATION_CLOSED ? (
+                      <div className="w-full sm:w-auto min-h-[44px] px-6 font-mono-tech text-xs tracking-wider font-bold bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase select-none clip-tactical">
+                        REGISTRATIONS CLOSED
+                      </div>
+                    ) : (
+                      <Button
+                        variant="alert"
+                        onClick={() => {
+                          const title = selectedTrack.title;
+                          handleCloseModal();
+                          onRegister(title);
+                        }}
+                        className="w-full sm:w-auto min-h-[44px] font-bold tracking-wider cursor-pointer"
+                      >
+                        REGISTER FOR THIS CRISIS →
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

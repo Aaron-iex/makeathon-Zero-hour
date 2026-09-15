@@ -116,7 +116,7 @@ export function SiteNav({
           </span>
           {REGISTRATION_CLOSED ? (
             <div className="ml-3 h-10 px-4 font-mono-tech font-bold text-xs bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase tracking-widest clip-tactical select-none">
-              CLOSED
+              REGISTRATIONS CLOSED
             </div>
           ) : (
             <Button variant="alert" size="default" className="ml-3" onClick={onRegister}>
@@ -126,14 +126,20 @@ export function SiteNav({
         </div>
 
         <div className="flex items-center gap-2 md:hidden">
-          <Button
-            variant="alert"
-            size="sm"
-            onClick={onRegister}
-            className="font-mono-tech text-[10px] tracking-wider px-3 min-h-[44px] touch-manipulation"
-          >
-            REGISTER
-          </Button>
+          {REGISTRATION_CLOSED ? (
+            <div className="font-mono-tech font-bold text-[10px] tracking-wider px-3 min-h-[44px] bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase select-none clip-tactical">
+              CLOSED
+            </div>
+          ) : (
+            <Button
+              variant="alert"
+              size="sm"
+              onClick={onRegister}
+              className="font-mono-tech text-[10px] tracking-wider px-3 min-h-[44px] touch-manipulation"
+            >
+              REGISTER
+            </Button>
+          )}
           <button
             className="grid size-11 place-items-center border border-border text-foreground clip-tactical touch-manipulation min-h-[44px] min-w-[44px] cursor-pointer"
             onClick={() => setOpen((v) => !v)}
@@ -166,16 +172,22 @@ export function SiteNav({
                 {activeTab === l.id && <span className="size-1.5 rounded-full bg-accent" />}
               </button>
             ))}
-            <Button
-              variant="alert"
-              className="mt-4 w-full group hover:shadow-[0_0_20px_rgba(224,76,17,0.4)] transition-shadow"
-              onClick={() => {
-                setOpen(false);
-                onRegister();
-              }}
-            >
-              Register squad
-            </Button>
+            {REGISTRATION_CLOSED ? (
+              <div className="mt-4 w-full h-11 font-mono-tech font-bold text-xs bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase tracking-widest clip-tactical select-none">
+                REGISTRATIONS CLOSED
+              </div>
+            ) : (
+              <Button
+                variant="alert"
+                className="mt-4 w-full group hover:shadow-[0_0_20px_rgba(224,76,17,0.4)] transition-shadow"
+                onClick={() => {
+                  setOpen(false);
+                  onRegister();
+                }}
+              >
+                Register squad
+              </Button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

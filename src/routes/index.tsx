@@ -8,7 +8,7 @@ import { Roadmap } from "@/components/zeroth/Roadmap";
 import { Intel } from "@/components/zeroth/Intel";
 import { SiteFooter } from "@/components/zeroth/SiteFooter";
 import { Sponsors } from "@/components/zeroth/Sponsors";
-import { RegisterDialog } from "@/components/zeroth/RegisterDialog";
+import { RegisterDialog, REGISTRATION_CLOSED } from "@/components/zeroth/RegisterDialog";
 import { SabotageQuiz } from "@/components/zeroth/SabotageQuiz";
 import { FilmGrain } from "@/components/zeroth/FilmGrain";
 import { loadState, saveState, STORAGE_KEYS } from "@/lib/state-persistence";
@@ -114,7 +114,16 @@ function Index() {
     return () => window.removeEventListener("beforeunload", onUnload);
   }, [tab, saveCurrentScroll]);
 
+  // Clean up any direct #register on load if registrations are closed
+  useEffect(() => {
+    if (REGISTRATION_CLOSED && typeof window !== "undefined" && window.location.hash === "#register") {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setOpen(false);
+    }
+  }, []);
+
   const openRegister = useCallback((selected = "") => {
+    if (REGISTRATION_CLOSED) return;
     setTrack(selected);
     setOpen(true);
   }, []);
@@ -133,6 +142,10 @@ function Index() {
   // Popstate listener for register dialog close
   useEffect(() => {
     const onPop = () => {
+      if (REGISTRATION_CLOSED) {
+        setOpen(false);
+        return;
+      }
       if (window.location.hash !== "#register") {
         setOpen(false);
       }
