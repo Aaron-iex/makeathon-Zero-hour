@@ -1,3 +1,4 @@
+import { REGISTRATION_CLOSED } from "@/components/zeroth/RegisterDialog";
 import { useState, useCallback, useRef } from "react";
 import { motion } from "framer-motion";
 import { ChevronRight, Clock, Flame, MapPin, Radio, Zap } from "lucide-react";

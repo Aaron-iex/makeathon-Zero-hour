@@ -318,7 +318,7 @@ export async function syncPaymentToRemote(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 8000);
 
-    const res = await fetch("/api/payments", {
+    const res = await fetch("/api/registrations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -448,7 +448,7 @@ export async function fetchPaymentStatuses(
 
     let json: unknown = null;
     try {
-      const proxyUrl = `/api/payments?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
+      const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
         headers: {
@@ -781,9 +781,9 @@ export async function submitRegistrationData(
     ...formData,
     id,
     timestamp,
-    status: "confirmed",
+    status: "confirmed" as const,
     checkedIn: false,
-    source: "local",
+    source: "local" as const,
     syncedToRemote: false,
     action: "register"
   };

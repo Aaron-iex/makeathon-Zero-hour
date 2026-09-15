@@ -1,3 +1,4 @@
+import { REGISTRATION_CLOSED } from "@/components/zeroth/RegisterDialog";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertTriangle, Calendar, ChevronRight, Clock, Flame, Radio, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -389,14 +390,15 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
         {/* Hero Interactive Content Layer */}
         <motion.div
-          variants={staggerContainer}
+          variants={staggerContainer as any}
           initial="hidden"
           animate="visible"
           className="mx-auto flex max-w-6xl flex-col items-center px-2 py-3 text-center sm:px-6 lg:px-8 sm:py-8"
         >
           {/* ── DEFCON Badge ── */}
           <motion.div
-            variants={revealInstrument}
+            
+            variants={revealInstrument as any}
             className="inline-flex items-center gap-2 border border-primary/60 bg-primary/15 px-3 py-1 sm:px-4 sm:py-1.5 clip-tactical mb-2.5 sm:mb-3"
           >
             <span className="relative flex size-2">
@@ -410,7 +412,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </motion.div>
 
           {/* ── College Header (Responsive Mobile Layout) ── */}
-          <motion.div variants={revealInstrument} className="w-full max-w-5xl px-1 sm:px-4">
+          <motion.div 
+            variants={revealInstrument as any} className="w-full max-w-5xl px-1 sm:px-4">
             <div className="flex flex-row items-center justify-between sm:justify-center gap-2 sm:gap-6">
               <div className="shrink-0">
                 <div className="size-12 sm:size-24 md:size-28 flex items-center justify-center filter drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
@@ -459,7 +462,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           <div className="relative mt-2 sm:mt-4">
             <RadarSweep />
             <div className="px-2 py-1 sm:px-8 sm:py-4">
-              <motion.h1 variants={revealInstrument} className="font-display uppercase">
+              <motion.h1 
+            variants={revealInstrument as any} className="font-display uppercase">
                 <span
                   className="block text-[clamp(2.25rem,8vw,6rem)] font-black text-foreground tracking-tighter leading-none"
                   style={{
@@ -476,7 +480,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
           </div>
 
           {/* ── Split-Flap Countdown (Spaced to keep boy center stage visible) ── */}
-          <motion.div variants={revealInstrument} className="mt-16 sm:mt-28 px-2 py-1">
+          <motion.div 
+            variants={revealInstrument as any} className="mt-16 sm:mt-28 px-2 py-1">
             <div className="flex items-center gap-1.5 mb-1.5 justify-center">
               <Shield className="size-3 sm:size-3.5 text-primary" />
               <span className="font-mono-tech text-[8px] sm:text-[9px] tracking-[0.2em] text-primary font-bold uppercase">
@@ -502,7 +507,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
           {/* ── Date & Venue (Updated Date: SEPT 23) ── */}
           <motion.div
-            variants={revealInstrument}
+            
+            variants={revealInstrument as any}
             className="mt-3.5 sm:mt-4 flex w-full max-w-md items-center gap-2.5 sm:gap-3 border border-accent/70 bg-card/90 px-3 py-2 sm:px-4 sm:py-2.5 clip-tactical text-left shadow-[0_4px_20px_rgba(0,0,0,0.6)]"
           >
             <Calendar className="size-4 sm:size-5 shrink-0 text-accent" aria-hidden />
@@ -518,19 +524,26 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
           {/* ── CTA Buttons ── */}
           <motion.div
-            variants={revealInstrument}
+            
+            variants={revealInstrument as any}
             className="mt-4 sm:mt-5 flex flex-col gap-2 sm:flex-row w-full sm:w-auto"
           >
-            <Button
-              variant="alert"
-              size="default"
-              onClick={onRegister}
-              className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
-            >
-              <Flame className="size-4" aria-hidden />
-              Enlist your squad
-              <ChevronRight className="size-4" aria-hidden />
-            </Button>
+            {REGISTRATION_CLOSED ? (
+              <div className="w-full sm:w-auto h-12 sm:h-11 font-mono-tech font-bold text-[13px] bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase tracking-widest clip-tactical select-none px-6">
+                REGISTRATIONS CLOSED
+              </div>
+            ) : (
+              <Button
+                variant="alert"
+                size="default"
+                onClick={onRegister}
+                className="w-full sm:w-auto h-12 sm:h-11 font-bold touch-manipulation group relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5"
+              >
+                <Flame className="size-4" aria-hidden />
+                Enlist your squad
+                <ChevronRight className="size-4" aria-hidden />
+              </Button>
+            )}
             <Button
               variant="tactical"
               size="default"
@@ -546,7 +559,8 @@ export function Hero({ onRegister }: { onRegister: () => void }) {
 
           {/* ── Prize & Fee Info (Tactical Telemetry Pods) ── */}
           <motion.div
-            variants={revealInstrument}
+            
+            variants={revealInstrument as any}
             className="mt-3.5 sm:mt-5 flex w-full max-w-lg flex-row gap-2 sm:gap-3 justify-center"
           >
             <div className="flex flex-1 flex-col items-center justify-center gap-0.5 bg-card/90 px-3 py-2.5 clip-tactical border border-primary/50 ascii-corners">

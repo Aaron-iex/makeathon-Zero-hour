@@ -1,3 +1,4 @@
+export const REGISTRATION_CLOSED = true;
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, Copy, Flame, ShieldCheck, X, RotateCcw, Save } from "lucide-react";
@@ -58,7 +59,7 @@ export function RegisterDialog({ open, onClose, initialTrack }: Props) {
 
   // Debounced auto-saver for form inputs
   const debouncedSaveRef = useRef(
-    debounce((data: FormData) => {
+    debounce((data: any) => {
       saveState(STORAGE_KEYS.REGISTRATION_DRAFT, data);
       setShowSavedIndicator(true);
       setTimeout(() => setShowSavedIndicator(false), 1800);

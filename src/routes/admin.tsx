@@ -340,6 +340,15 @@ export function AdminDashboard() {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return;clearTimeout(timer);
+  }, [searchQuery]);
   const [selectedTrack, setSelectedTrack] = useState<string>("all");
   const [checkInFilter, setCheckInFilter] = useState<"all" | "checked" | "unchecked">("all");
   const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid">("all");
@@ -384,7 +393,7 @@ export function AdminDashboard() {
     window.addEventListener("storage", handleStorageUpdate);
     window.addEventListener("zeroth_registration_updated", handleStorageUpdate);
 
-    return () => {
+    return;{
       window.removeEventListener("storage", handleStorageUpdate);
       window.removeEventListener("zeroth_registration_updated", handleStorageUpdate);
     };
@@ -498,13 +507,8 @@ export function AdminDashboard() {
     // Fetch fresh data in background immediately; UI already shows cached registrations
     handleGentleAutoRefresh();
 
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        handleGentleAutoRefresh();
-      }
-    }, 25000);
-
-    return () => clearInterval(interval);
+    
+    return;
   }, [isAuthenticated, handleGentleAutoRefresh]);
 
   const handleSelectSquad = useCallback((squad: Registration) => {
@@ -731,7 +735,7 @@ export function AdminDashboard() {
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && filteredRegistrations.length === 1) {
-      handleSelectSquad(filteredRegistrations[0]);
+      handleSelectSquad(filteredRegistrations[0]!);
       // Remove focus so modal can take over
       searchInputRef.current?.blur();
     }
@@ -741,8 +745,8 @@ export function AdminDashboard() {
     return registrations
       .filter((r) => {
         // Search filter
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+        if (debouncedSearchQuery.trim()) {
+          const q = debouncedSearchQuery.toLowerCase();
           const match =
             r.teamName?.toLowerCase().includes(q) ||
             r.leaderName?.toLowerCase().includes(q) ||
@@ -785,7 +789,7 @@ export function AdminDashboard() {
         }
         return 0;
       });
-  }, [registrations, searchQuery, selectedTrack, checkInFilter, paidFilter, sortBy]);
+  }, [registrations, debouncedSearchQuery, selectedTrack, checkInFilter, paidFilter, sortBy]);
 
   // Analytics Metrics
   const metrics = useMemo(() => {

@@ -1,3 +1,4 @@
+import { REGISTRATION_CLOSED } from "@/components/zeroth/RegisterDialog";
 import { useEffect, useState } from "react";
 import { Menu, ShieldAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -113,9 +114,15 @@ export function SiteNav({
             </span>
             LIVE
           </span>
-          <Button variant="alert" size="default" className="ml-3" onClick={onRegister}>
-            Register
-          </Button>
+          {REGISTRATION_CLOSED ? (
+            <div className="ml-3 h-10 px-4 font-mono-tech font-bold text-xs bg-neutral-900 border border-neutral-800 text-neutral-500 flex items-center justify-center uppercase tracking-widest clip-tactical select-none">
+              CLOSED
+            </div>
+          ) : (
+            <Button variant="alert" size="default" className="ml-3" onClick={onRegister}>
+              Register
+            </Button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 md:hidden">

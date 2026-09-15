@@ -6,7 +6,7 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import type { Plugin } from "vite";
-import { handleRegistrationsProxy, handlePaymentsProxy } from "./src/server/proxy-handlers.ts";
+import { handleRegistrationsProxy } from "./src/server/proxy-handlers.ts";
 
 function apiDevProxyPlugin(): Plugin {
   return {
@@ -16,9 +16,7 @@ function apiDevProxyPlugin(): Plugin {
         const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
         if (
           url.pathname === "/api/registrations" ||
-          url.pathname === "/api/registrations/" ||
-          url.pathname === "/api/payments" ||
-          url.pathname === "/api/payments/"
+          url.pathname === "/api/registrations/" 
         ) {
           try {
             const chunks: Uint8Array[] = [];
@@ -47,12 +45,10 @@ function apiDevProxyPlugin(): Plugin {
                   : null,
             });
 
-            const webResponse = url.pathname.startsWith("/api/registrations")
-              ? await handleRegistrationsProxy(webRequest)
-              : await handlePaymentsProxy(webRequest);
+            const webResponse = await handleRegistrationsProxy(webRequest);
 
             res.statusCode = webResponse.status;
-            webResponse.headers.forEach((val, key) => {
+            webResponse.headers.forEach((val: string, key: string) => {
               res.setHeader(key, val);
             });
             const arrayBuffer = await webResponse.arrayBuffer();

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@tanstack/react-router";
 import React from "react";
 
 import { cn } from "@/lib/utils";

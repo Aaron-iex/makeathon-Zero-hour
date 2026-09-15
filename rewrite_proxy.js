@@ -1,13 +1,24 @@
 import fs from 'fs';
 
-const code = `/**
+const proxyCode = `/**
  * Server-side proxy and caching layer for Google Sheets & Payments Webhooks.
- * Runs across Cloudflare Workers / Nitro SSR, Cloudflare Pages Functions, and Vite dev server middleware.
+ * Runs across Cloudflare Workers / Nitro SSR, Cloudflare Pages Functions,
+ * and Vite dev server middleware.
  */
 
 const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
 const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
 const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
+
+interface CacheRecord {
+  body: string;
+  contentType: string;
+  status: number;
+  timestamp: number;
+}
+
+const registrationsCache = new Map<string, CacheRecord>();
+const CACHE_TTL_MS = 8000;
 
 function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin") || "";
@@ -27,13 +38,13 @@ function getCorsHeaders(request: Request): Record<string, string> {
 function jsonResponse(
   data: unknown,
   status = 200,
-  headers: Record<string, string> = {},
+  extraHeaders: Record<string, string> = {},
   request?: Request,
-): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...getCorsHeaders(request as Request), "Content-Type": "application/json", ...headers },
-  });
+) {
+  const headers = request
+    ? { ...getCorsHeaders(request), "Content-Type": "application/json", ...extraHeaders }
+    : { "Content-Type": "application/json", ...extraHeaders };
+  return new Response(JSON.stringify(data), { status, headers });
 }
 
 export async function handleRegistrationsProxy(
@@ -56,115 +67,167 @@ export async function handleRegistrationsProxy(
 
   const url = new URL(request.url);
 
+  // ── GET: Read and merge from both Webhooks ──
   if (request.method === "GET") {
     if (!isAuthenticated) return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
 
-    const targetUrl = url.searchParams.get("url")?.trim() || SHEETS_WEBHOOK_URL;
+    const bypassCache =
+      url.searchParams.get("fresh") === "1" ||
+      url.searchParams.get("bypass") === "1" ||
+      request.headers.get("cache-control") === "no-cache";
+
+    const cacheKey = "MERGED_REGISTRATIONS";
+    const now = Date.now();
+
+    if (!bypassCache) {
+      const cached = registrationsCache.get(cacheKey);
+      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+        return new Response(cached.body, {
+          status: cached.status,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": cached.contentType,
+            "X-Cache-Status": "HIT",
+            "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
+          },
+        });
+      }
+    } else {
+      registrationsCache.delete(cacheKey);
+    }
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
-      
-      const upstreamRes = await fetch(
-        \`\${targetUrl}\${targetUrl.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
-        {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-          redirect: "follow",
-        }
-      );
-      
-      let paymentsData: any[] = [];
-      if (PAYMENTS_WEBHOOK_URL) {
-         try {
-            const pRes = await fetch(
-              \`\${PAYMENTS_WEBHOOK_URL}\${PAYMENTS_WEBHOOK_URL.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
-              { method: "GET", headers: { Accept: "application/json" } }
-            );
-            if (pRes.ok) {
-               const pJson: any = await pRes.json();
-               paymentsData = Array.isArray(pJson) ? pJson : (Array.isArray(pJson.data) ? pJson.data : []);
-            }
-         } catch(e) {}
-      }
+
+      const fetchSheets = fetch(\`\${SHEETS_WEBHOOK_URL}\${SHEETS_WEBHOOK_URL.includes("?") ? "&" : "?"}_t=\${now}\`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      }).then(r => {
+        if (!r.ok) throw new Error(\`Sheets returned \${r.status}\`);
+        return r.json();
+      });
+
+      const fetchPayments = PAYMENTS_WEBHOOK_URL ? fetch(\`\${PAYMENTS_WEBHOOK_URL}\${PAYMENTS_WEBHOOK_URL.includes("?") ? "&" : "?"}_t=\${now}\`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      }).then(r => {
+        if (!r.ok) throw new Error(\`Payments returned \${r.status}\`);
+        return r.json();
+      }).catch(err => {
+        console.warn("Proxy: Failed to fetch payments:", err);
+        return [];
+      }) : Promise.resolve([]);
+
+      const [sheetsData, paymentsData] = await Promise.all([fetchSheets, fetchPayments]);
       clearTimeout(timeout);
-
-      if (!upstreamRes.ok) {
-        throw new Error(\`Upstream returned HTTP \${upstreamRes.status}\`);
+      
+      // Process Sheets Data
+      const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
+      
+      // Process Payments Data (handle both bare array and { success, data })
+      let payArray: any[] = [];
+      if (Array.isArray(paymentsData)) {
+        payArray = paymentsData;
+      } else if (paymentsData && Array.isArray(paymentsData.data)) {
+        payArray = paymentsData.data;
       }
       
-      const rawText = await upstreamRes.text();
-      let json: any = JSON.parse(rawText);
-      
-      if (Array.isArray(json)) {
-        // Map Payments
-        const paymentMap = new Map();
-        for (const item of paymentsData) {
-          const id = String(item.id || item.ID || item["Pass ID"] || item["PassID"] || item.passId || "").trim();
-          if (!id) continue;
-          const isExplicitFalse =
-            item.paid === false ||
-            String(item.paid || "").toLowerCase() === "false" ||
-            String(item.status || "").toLowerCase() === "unpaid" ||
-            String(item.status || "").toLowerCase() === "not paid" ||
-            String(item.paid || "").toUpperCase() === "NO" ||
-            String(item["Paid"] || "").toUpperCase() === "NO";
-
-          const paymentRef = String(
-            item.paymentRef || item.referenceId || item["Payment Ref"] || item["Payment Reference ID"] || "",
-          ).trim();
-
-          const paid = !isExplicitFalse && (item.paid === true || String(item.paid || "").toLowerCase() === "true" || String(item["Paid"] || "").toUpperCase() === "YES" || Boolean(paymentRef));
-          
-          paymentMap.set(id, { paid, paymentRef });
+      const paymentMap = new Map<string, { paid: boolean, paymentRef: string }>();
+      for (const p of payArray) {
+        if (p.id) {
+          paymentMap.set(String(p.id), {
+             paid: true,
+             paymentRef: p.paymentRef || ""
+          });
         }
-        
-        // Map Registrations
-        const mapped = json.map(item => {
-           const id = String(item.id || item.ID || item["Pass ID"] || \`ZH-\${Math.floor(100000 + Math.random() * 900000)}\`);
-           const payInfo = paymentMap.get(id) || {};
-           
-           return {
-             id,
-             teamName: String(item.teamName || item["Team Name"] || "Unnamed Squad"),
-             leaderName: String(item.leaderName || item["Leader Name"] || "Unknown"),
-             email: String(item.email || item.Email || ""),
-             phone: String(item.phone || item.Phone || item["Mobile Number"] || ""),
-             institution: String(item.institution || item.Institution || item["Institution / College"] || ""),
-             track: String(item.track || item.Track || item["Threat Sector"] || "General"),
-             teamSize: String(item.teamSize || item["Team Size"] || item["Squad Size"] || "4"),
-             memberNames: (() => {
-                const raw = item.memberNames || item["Member Names"];
-                if (Array.isArray(raw)) return raw.map(String);
-                if (typeof raw === "string" && raw.trim() !== "") {
-                  return raw.split("\\n").map((n: string) => n.replace(/^\\d+\\.\\s*/, "").trim()).filter(Boolean);
-                }
-                return [];
-             })(),
-             brief: String(item.brief || item.Brief || item["Mission Brief"] || ""),
-             timestamp: String(item.timestamp || item.Timestamp || item["Registered At"] || new Date().toISOString()),
-             checkedIn: Boolean(item.checkedIn || item.CheckedIn || String(item["Checked In"] || "").toUpperCase() === "YES"),
-             status: item.status || "confirmed",
-             paid: payInfo.paid !== undefined ? payInfo.paid : Boolean(item.paid || item.Paid || String(item["Paid"] || "").toUpperCase() === "YES"),
-             paymentRef: payInfo.paymentRef !== undefined ? payInfo.paymentRef : (item.paymentRef ? String(item.paymentRef) : item["Payment Ref"] ? String(item["Payment Ref"]) : undefined),
-             source: "remote",
-             syncedToRemote: true,
-           };
-        });
-        
-        return jsonResponse(mapped, 200, {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-        }, request);
       }
+
+      // Merge
+      const merged = rawRegs.map((reg: any) => {
+        const id = String(reg.id || reg.ID || "");
+        const pData = paymentMap.get(id);
+        
+        let memberNames: string[] = [];
+        if (Array.isArray(reg.memberNames)) {
+          memberNames = reg.memberNames;
+        } else if (typeof reg.memberNames === "string") {
+          memberNames = reg.memberNames.split(",").map((s: string) => s.trim()).filter(Boolean);
+        } else if (typeof reg.TeamMembers === "string") {
+          memberNames = reg.TeamMembers.split(",").map((s: string) => s.trim()).filter(Boolean);
+        }
+
+        return {
+          id,
+          teamName: String(reg.teamName || reg["Team Name"] || ""),
+          leaderName: String(reg.leaderName || reg["Leader Name"] || ""),
+          email: String(reg.email || reg.Email || ""),
+          phone: String(reg.phone || reg["Mobile Number"] || ""),
+          institution: String(reg.institution || reg.Institution || ""),
+          track: String(reg.track || reg.Track || reg["Threat Sector"] || ""),
+          teamSize: String(reg.teamSize || reg["Team Size"] || reg["Squad Size"] || "4"),
+          brief: String(reg.brief || reg["Mission Brief"] || ""),
+          timestamp: String(reg.timestamp || reg.Timestamp || reg["Registered At"] || ""),
+          checkedIn: String(reg.checkedIn || reg["Checked In"] || "").toUpperCase() === "YES" || reg.checkedIn === true,
+          memberNames,
+          source: "cloud",
+          syncedToRemote: true,
+          status: "confirmed",
+          paid: pData ? pData.paid : false,
+          paymentRef: pData ? pData.paymentRef : ""
+        };
+      });
+
+      const responseBody = JSON.stringify(merged);
       
-      return jsonResponse({ error: "Invalid array from Sheets" }, 502, {}, request);
+      registrationsCache.set(cacheKey, {
+        body: responseBody,
+        contentType: "application/json; charset=utf-8",
+        status: 200,
+        timestamp: now,
+      });
+
+      return new Response(responseBody, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json; charset=utf-8",
+          "X-Cache-Status": "MISS",
+          "Cache-Control": "public, max-age=6, s-maxage=6, stale-while-revalidate=5",
+        },
+      });
+      
     } catch (err) {
-      console.warn("Proxy GET error:", err);
-      return jsonResponse({ error: "Upstream fetch failed" }, 502, {}, request);
+      console.warn("Registrations upstream fetch error:", err);
+
+      const stale = registrationsCache.get(cacheKey);
+      if (stale) {
+        return new Response(stale.body, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": stale.contentType,
+            "X-Cache-Status": "STALE-FALLBACK",
+            "Cache-Control": "no-cache",
+          },
+        });
+      }
+
+      return jsonResponse(
+        {
+          success: false,
+          error: "Upstream Google Sheet fetch failed or timed out",
+        },
+        502,
+        {},
+        request,
+      );
     }
   }
 
-  // ── POST: Mutations (Sheets Only) ──
+  // ── POST: Write actions ──
   if (request.method === "POST") {
     try {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -174,12 +237,21 @@ export async function handleRegistrationsProxy(
         return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
       }
 
+      // Everything POSTed to /api/registrations now writes strictly to SHEETS_WEBHOOK_URL.
+      const targetUrl = SHEETS_WEBHOOK_URL;
       const { url: _strippedUrl, ...actionPayload } = body;
-      const targetUrl = (typeof body["url"] === "string" && body["url"].trim()) || SHEETS_WEBHOOK_URL;
 
-      // Forward directly to Google Sheets Apps Script
+      // Force delete payload to match script
+      if (action === "delete") {
+         actionPayload.action = "delete";
+         // id is already present
+      }
+
+      // If array is passed, don't stringify it in proxy. We let fetch JSON.stringify it naturally below
+      
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
+
       const upstreamRes = await fetch(targetUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,116 +259,48 @@ export async function handleRegistrationsProxy(
         signal: controller.signal,
         redirect: "follow",
       });
+
       clearTimeout(timeout);
       
-      return jsonResponse({ success: true, from: "sheets-only" }, 200, {}, request);
+      // Invalidate GET cache
+      registrationsCache.delete("MERGED_REGISTRATIONS");
+
+      const responseText = await upstreamRes.text().catch(() => "");
+      let responseJson: unknown = null;
+      try {
+        responseJson = JSON.parse(responseText);
+      } catch {
+        responseJson = { raw: responseText };
+      }
+
+      return jsonResponse(
+        {
+          success: upstreamRes.ok,
+          status: upstreamRes.status,
+          result: responseJson,
+        },
+        200,
+        {},
+        request,
+      );
     } catch (err) {
       console.error("Registrations proxy POST error:", err);
-      return jsonResponse({ success: false, error: "Failed to forward action" }, 500, {}, request);
-    }
-  }
-
-  return jsonResponse({ error: "Method not allowed" }, 405, {}, request);
-}
-
-export async function handlePaymentsProxy(
-  request: Request,
-  _env?: unknown,
-  _ctx?: unknown,
-): Promise<Response> {
-  if (!PAYMENTS_WEBHOOK_URL || !ADMIN_SECRET_TOKEN) {
-    return jsonResponse({ error: "Server misconfiguration" }, 500, {}, request);
-  }
-
-  const corsHeaders = getCorsHeaders(request);
-
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
-
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader || authHeader !== \`Bearer \${ADMIN_SECRET_TOKEN}\`) {
-    return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
-  }
-
-  const url = new URL(request.url);
-
-  if (request.method === "GET") {
-    const targetUrl = url.searchParams.get("url")?.trim() || PAYMENTS_WEBHOOK_URL;
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      const upstreamRes = await fetch(
-        \`\${targetUrl}\${targetUrl.includes("?") ? "&" : "?"}_t=\${Date.now()}\`,
+      // Let it return 200 with success: false so the app can fallback.
+      return jsonResponse(
         {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-          redirect: "follow",
-        }
-      );
-      clearTimeout(timeout);
-
-      const rawText = await upstreamRes.text();
-      return new Response(rawText, {
-        status: upstreamRes.status,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
+          success: false,
+          error: "Failed to forward action to Google Sheets",
         },
-      });
-    } catch (err) {
-      return jsonResponse({ error: "Upstream fetch failed" }, 502, {}, request);
-    }
-  }
-
-  if (request.method === "POST") {
-    try {
-      const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-      const targetUrl = (typeof body["url"] === "string" && body["url"].trim()) || PAYMENTS_WEBHOOK_URL;
-      const { url: _strippedUrl, ...actionPayload } = body;
-      const { action, id, paymentRef } = actionPayload as any;
-
-      if (action === "markPaid" && (!paymentRef || typeof paymentRef !== "string" || paymentRef.trim() === "")) {
-         return jsonResponse({ error: "paymentRef is required" }, 400, {}, request);
-      }
-
-      // 1. Post to comms automation script (PAYMENTS_WEBHOOK_URL)
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      await fetch(targetUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(actionPayload),
-        signal: controller.signal,
-        redirect: "follow",
-      }).catch(err => console.error("Payment webhook failed:", err));
-      clearTimeout(timeout);
-      
-      // 2. Post to Sheets script (SHEETS_WEBHOOK_URL) for backup
-      if (process.env.SHEETS_WEBHOOK_URL) {
-         fetch(process.env.SHEETS_WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "updatePayment",
-              id,
-              paid: action === "markPaid",
-              paymentRef: action === "markPaid" ? paymentRef.trim() : ""
-            })
-         }).catch(err => console.error("Fallback Sheets updatePayment failed:", err));
-      }
-
-      return jsonResponse({ success: true }, 200, {}, request);
-    } catch (err) {
-      console.error("Payments proxy POST error:", err);
-      return jsonResponse({ success: false, error: "Failed to forward payment" }, 500, {}, request);
+        200,
+        {},
+        request,
+      );
     }
   }
 
   return jsonResponse({ error: "Method not allowed" }, 405, {}, request);
 }
 `;
-fs.writeFileSync('src/server/proxy-handlers.ts', code);
-console.log("Rewrote src/server/proxy-handlers.ts");
+
+fs.writeFileSync('src/server/proxy-handlers.ts', proxyCode);
+console.log("Rewrote proxy-handlers.ts");
