@@ -136,6 +136,7 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
         action: "updateCheckIn",
         id,
         checkedIn,
+        sheetsUrl: webhookUrl,
         url: webhookUrl,
       }),
       signal: controller.signal,
@@ -180,9 +181,6 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
 }
 
 /**
- * Syncs deletion to Google Sheets via caching proxy (with direct fallback)
- */
-/**
  * Syncs team member names to Google Sheets via caching proxy (with direct fallback)
  */
 export async function syncMemberNamesToRemote(id: string, memberNames: string[]): Promise<boolean> {
@@ -201,6 +199,7 @@ export async function syncMemberNamesToRemote(id: string, memberNames: string[])
         action: "updateMemberNames",
         id,
         memberNames: memberNames,
+        sheetsUrl: webhookUrl,
         url: webhookUrl,
       }),
       signal: controller.signal,
@@ -259,6 +258,7 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
       body: JSON.stringify({
         action: "delete",
         id,
+        sheetsUrl: webhookUrl,
         url: webhookUrl,
       }),
       signal: controller.signal,
@@ -313,6 +313,7 @@ export async function syncPaymentToRemote(
   paid: boolean = true,
 ): Promise<boolean> {
   const paymentsUrl = getPaymentsWebhookUrl();
+  const sheetsUrl = getGoogleSheetsWebhookUrl();
   const action = paid ? "markPaid" : "markUnpaid";
   try {
     const controller = new AbortController();
@@ -332,6 +333,8 @@ export async function syncPaymentToRemote(
         leaderName,
         teamName,
         paid,
+        paymentsUrl,
+        sheetsUrl,
         url: paymentsUrl,
       }),
       signal: controller.signal,
@@ -448,7 +451,7 @@ export async function fetchPaymentStatuses(
 
     let json: unknown = null;
     try {
-      const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
+      const proxyUrl = `/api/registrations?paymentsUrl=${encodeURIComponent(url)}&url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
         headers: {
@@ -567,6 +570,7 @@ export async function fetchRemoteRegistrations(
   options?: { forceFresh?: boolean },
 ): Promise<{ success: boolean; data: Registration[]; message?: string }> {
   const url = (urlOverride || getGoogleSheetsWebhookUrl()).trim();
+  const paymentsUrl = getPaymentsWebhookUrl().trim();
 
   try {
     const controller = new AbortController();
@@ -575,7 +579,7 @@ export async function fetchRemoteRegistrations(
     // Call caching proxy endpoint first
     let json: unknown = null;
     try {
-      const proxyUrl = `/api/registrations?url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
+      const proxyUrl = `/api/registrations?sheetsUrl=${encodeURIComponent(url)}&paymentsUrl=${encodeURIComponent(paymentsUrl)}&url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
         method: "GET",
         headers: {
