@@ -155,6 +155,16 @@ const RegistrationRow = memo(function RegistrationRow({
             {r.teamSize} {r.teamSize === "1" ? "solo" : "members"}
           </span>
         </div>
+        {r.memberNames && r.memberNames.length > 0 && (
+          <div className="text-[10px] font-mono-tech text-neutral-400 mt-1 flex flex-wrap gap-1">
+            <span className="text-neutral-500">Members:</span>
+            {r.memberNames.map((m, idx) => (
+              <span key={idx} className="bg-neutral-800/80 px-1 py-0.5 rounded text-neutral-300">
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
         {r.brief && (
           <p
             className="text-[11px] text-neutral-400 break-words line-clamp-2 mt-0.5"
@@ -411,6 +421,9 @@ export function AdminDashboard() {
       isSyncingRef.current = true;
       setIsSyncing(true);
       try {
+        if (isFresh) {
+          clearStoredRegistrations();
+        }
         const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
         if (res.success && res.data) {
           setRegistrations(res.data);

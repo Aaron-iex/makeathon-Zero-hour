@@ -641,10 +641,25 @@ export async function fetchRemoteRegistrations(
         track: String(item.track || item.Track || item["Threat Sector"] || "General"),
         teamSize: String(item.teamSize || item["Team Size"] || item["Squad Size"] || "4"),
         memberNames: (() => {
-          const raw = item.memberNames || item["Member Names"];
-          if (Array.isArray(raw)) return raw.map(String);
+          const raw =
+            item.memberNames ||
+            item["Member Names"] ||
+            item["Team Members"] ||
+            item["Members"] ||
+            item.TeamMembers;
+
+          if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
           if (typeof raw === "string" && raw.trim() !== "") {
-            return raw.split("\n").map((n) => n.replace(/^\d+\.\s*/, "").trim()).filter(Boolean);
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                return parsed.map(String).map((s) => s.trim()).filter(Boolean);
+              }
+            } catch {}
+            return raw
+              .split(/[\n,]+/)
+              .map((n) => n.replace(/^\d+\.\s*/, "").trim())
+              .filter(Boolean);
           }
           return [];
         })(),
@@ -679,7 +694,7 @@ export async function fetchRemoteRegistrations(
       const local = getStoredRegistrations();
       const map = new Map<string, Registration>();
 
-      // 1. Put remote first and enrich with payments
+      // 1. Put remote first and enrich with payments (safely merge duplicates)
       parsed.forEach((r) => {
         const payInfo = paymentMap[r.id];
         if (payInfo) {
@@ -688,7 +703,26 @@ export async function fetchRemoteRegistrations(
         }
         r.source = "remote";
         r.syncedToRemote = true;
-        map.set(r.id, r);
+
+        const existing = map.get(r.id);
+        if (existing) {
+          // If existing has non-blank fields and new one is blank, keep existing values
+          const merged: Registration = { ...existing };
+          if (r.teamName && r.teamName.trim()) merged.teamName = r.teamName;
+          if (r.leaderName && r.leaderName.trim()) merged.leaderName = r.leaderName;
+          if (r.email && r.email.trim()) merged.email = r.email;
+          if (r.phone && r.phone.trim()) merged.phone = r.phone;
+          if (r.institution && r.institution.trim()) merged.institution = r.institution;
+          if (r.track && r.track.trim()) merged.track = r.track;
+          if (r.brief && r.brief.trim()) merged.brief = r.brief;
+          if (r.memberNames && r.memberNames.length > 0) merged.memberNames = r.memberNames;
+          if (r.paid !== undefined) merged.paid = r.paid;
+          if (r.paymentRef) merged.paymentRef = r.paymentRef;
+          if (r.checkedIn !== undefined) merged.checkedIn = r.checkedIn;
+          map.set(r.id, merged);
+        } else {
+          map.set(r.id, r);
+        }
       });
 
       // 2. Safety check: Protect against upstream quota failures, partial responses, or timeouts.

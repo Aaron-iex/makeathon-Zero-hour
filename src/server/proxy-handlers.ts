@@ -148,8 +148,26 @@ export async function handleRegistrationsProxy(
       const [sheetsData, paymentsData] = await Promise.all([fetchSheets, fetchPayments]);
       clearTimeout(timeout);
       
-      // Process Sheets Data
+      // Process Sheets Data & Deduplicate by ID (protecting against blank duplicate rows)
       const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
+      const deduplicatedMap = new Map<string, any>();
+      for (const reg of rawRegs) {
+        const id = String(reg.id || reg.ID || "").trim();
+        if (!id) continue;
+        if (!deduplicatedMap.has(id)) {
+          deduplicatedMap.set(id, reg);
+        } else {
+          const existing = deduplicatedMap.get(id);
+          const mergedItem = { ...existing };
+          for (const [k, v] of Object.entries(reg)) {
+            if (v && (!existing[k] || String(existing[k]).trim() === "")) {
+              mergedItem[k] = v;
+            }
+          }
+          deduplicatedMap.set(id, mergedItem);
+        }
+      }
+      const uniqueRegs = Array.from(deduplicatedMap.values());
       
       // Process Payments Data (handle both bare array and { success, data })
       let payArray: any[] = [];
@@ -170,17 +188,33 @@ export async function handleRegistrationsProxy(
       }
 
       // Merge
-      const merged = rawRegs.map((reg: any) => {
+      const merged = uniqueRegs.map((reg: any) => {
         const id = String(reg.id || reg.ID || "");
         const pData = paymentMap.get(id);
         
         let memberNames: string[] = [];
-        if (Array.isArray(reg.memberNames)) {
-          memberNames = reg.memberNames;
-        } else if (typeof reg.memberNames === "string") {
-          memberNames = reg.memberNames.split(",").map((s: string) => s.trim()).filter(Boolean);
-        } else if (typeof reg.TeamMembers === "string") {
-          memberNames = reg.TeamMembers.split(",").map((s: string) => s.trim()).filter(Boolean);
+        const rawMembers =
+          reg.memberNames ||
+          reg["Member Names"] ||
+          reg.TeamMembers ||
+          reg["Team Members"] ||
+          reg["Members"];
+
+        if (Array.isArray(rawMembers)) {
+          memberNames = rawMembers.map(String).map((s: string) => s.trim()).filter(Boolean);
+        } else if (typeof rawMembers === "string" && rawMembers.trim()) {
+          try {
+            const parsed = JSON.parse(rawMembers);
+            if (Array.isArray(parsed)) {
+              memberNames = parsed.map(String).map((s: string) => s.trim()).filter(Boolean);
+            }
+          } catch {}
+          if (memberNames.length === 0) {
+            memberNames = rawMembers
+              .split(/[\n,]+/)
+              .map((s: string) => s.replace(/^\d+\.\s*/, "").trim())
+              .filter(Boolean);
+          }
         }
 
         return {
