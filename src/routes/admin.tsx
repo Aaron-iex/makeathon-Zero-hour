@@ -15,6 +15,7 @@ import {
   syncCheckInToRemote,
   syncDeleteToRemote,
   syncPaymentToRemote,
+  getAuthToken,
   BACKUP_GOOGLE_FORM_URL,
   type Registration,
 } from "@/lib/registrations";
@@ -393,7 +394,7 @@ export function AdminDashboard() {
     window.addEventListener("storage", handleStorageUpdate);
     window.addEventListener("zeroth_registration_updated", handleStorageUpdate);
 
-    return;{
+    return () => {
       window.removeEventListener("storage", handleStorageUpdate);
       window.removeEventListener("zeroth_registration_updated", handleStorageUpdate);
     };
@@ -710,6 +711,39 @@ export function AdminDashboard() {
       teamSize: "4",
       brief: "",
     });
+
+    // Sync on-spot squad registration to Google Sheets in background
+    fetch("/api/registrations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify({
+        action: "register",
+        id: reg.id,
+        teamName: reg.teamName,
+        leaderName: reg.leaderName,
+        email: reg.email,
+        phone: reg.phone,
+        institution: reg.institution,
+        track: reg.track,
+        teamSize: reg.teamSize || "4",
+        brief: reg.brief || "",
+        timestamp: reg.timestamp,
+        checkedIn: reg.checkedIn,
+        memberNames: [],
+      }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          const syncedReg: Registration = { ...reg, syncedToRemote: true, source: "remote" };
+          saveRegistrationLocally(syncedReg);
+        }
+      })
+      .catch((err) => {
+        console.warn("Add Squad remote sync error:", err);
+      });
   };
 
   const handleExport = () => {

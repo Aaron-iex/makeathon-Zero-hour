@@ -235,18 +235,172 @@ export async function handleRegistrationsProxy(
         return jsonResponse({ error: "Unauthorized" }, 401, {}, request);
       }
 
-      // Everything POSTed to /api/registrations now writes strictly to SHEETS_WEBHOOK_URL.
-      const targetUrl = (typeof body["url"] === "string" && body["url"].trim()) || SHEETS_WEBHOOK_URL;
-      const { url: _strippedUrl, ...actionPayload } = body;
+      // Invalidate GET cache immediately upon any write action
+      registrationsCache.delete("MERGED_REGISTRATIONS");
 
-      // Force delete payload to match script
-      if (action === "delete") {
-         actionPayload.action = "delete";
-         // id is already present
+      const id = String(body["id"] || "");
+      const isPaymentAction =
+        action === "markPaid" ||
+        action === "markUnpaid" ||
+        action === "updatePayment";
+
+      // ── SPECIAL DUAL-WRITE DISPATCH FOR PAYMENTS ──
+      // When payment is updated, call BOTH:
+      // (a) SHEETS_WEBHOOK_URL to update the Google Sheet backup.
+      // (b) PAYMENTS_WEBHOOK_URL to trigger acceptance + OD proof email from makeathonzerothhour@gmail.com.
+      if (isPaymentAction) {
+        const isPaid =
+          action === "markPaid" ||
+          (action === "updatePayment" &&
+            (body["paid"] === true ||
+              String(body["paid"]).toLowerCase() === "true" ||
+              String(body["paid"]).toUpperCase() === "YES"));
+
+        const paymentRef =
+          typeof body["paymentRef"] === "string" ? body["paymentRef"].trim() : "";
+        const email = typeof body["email"] === "string" ? body["email"].trim() : "";
+        const leaderName =
+          typeof body["leaderName"] === "string" ? body["leaderName"].trim() : "";
+        const teamName =
+          typeof body["teamName"] === "string" ? body["teamName"].trim() : "";
+
+        const sheetsTargetUrl = SHEETS_WEBHOOK_URL;
+        const paymentsTargetUrl = PAYMENTS_WEBHOOK_URL;
+
+        // 1. Sheets Webhook Payload (writes to Registrations Google Sheet)
+        const sheetPayload = {
+          action: "updatePayment",
+          id,
+          paid: isPaid,
+          paymentRef: isPaid ? paymentRef : "",
+        };
+
+        // 2. Comms Webhook Payload (writes to Payments tab & sends confirmation email)
+        const paymentsPayload = {
+          id,
+          email,
+          paymentRef: isPaid ? paymentRef : "",
+          leaderName,
+          teamName,
+          action: isPaid ? "markPaid" : "markUnpaid",
+          paid: isPaid,
+        };
+
+        console.log(
+          `[PROXY POST ${action}] Calling SHEETS_WEBHOOK_URL (${sheetsTargetUrl}):`,
+          JSON.stringify(sheetPayload),
+        );
+        console.log(
+          `[PROXY POST ${action}] Calling PAYMENTS_WEBHOOK_URL (${paymentsTargetUrl}):`,
+          JSON.stringify(paymentsPayload),
+        );
+
+        // Call (a): Primary Google Sheets Webhook
+        const sheetCall = (async () => {
+          if (!sheetsTargetUrl) {
+            console.warn("[PROXY POST updatePayment] SHEETS_WEBHOOK_URL not configured");
+            return { success: false, error: "No SHEETS_WEBHOOK_URL configured" };
+          }
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(sheetsTargetUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(sheetPayload),
+              signal: controller.signal,
+              redirect: "follow",
+            });
+            clearTimeout(timeout);
+            const text = await res.text().catch(() => "");
+            let json: unknown = null;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              json = { raw: text };
+            }
+            console.log(
+              `[PROXY POST ${action}] SHEETS response (status ${res.status}):`,
+              JSON.stringify(json),
+            );
+            return { success: res.ok, status: res.status, result: json };
+          } catch (err) {
+            console.error(`[PROXY POST ${action}] Error calling SHEETS_WEBHOOK_URL:`, err);
+            return { success: false, error: String(err) };
+          }
+        })();
+
+        // Call (b): Comms Automation Webhook (makeathonzerothhour@gmail.com)
+        const paymentsCall = (async () => {
+          if (!paymentsTargetUrl) {
+            console.warn(
+              `[PROXY POST ${action}] PAYMENTS_WEBHOOK_URL not configured, skipping comms trigger`,
+            );
+            return { success: false, skipped: true, error: "No PAYMENTS_WEBHOOK_URL configured" };
+          }
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(paymentsTargetUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(paymentsPayload),
+              signal: controller.signal,
+              redirect: "follow",
+            });
+            clearTimeout(timeout);
+            const text = await res.text().catch(() => "");
+            let json: unknown = null;
+            try {
+              json = JSON.parse(text);
+            } catch {
+              json = { raw: text };
+            }
+            console.log(
+              `[PROXY POST ${action}] PAYMENTS/COMMS response (status ${res.status}):`,
+              JSON.stringify(json),
+            );
+            return { success: res.ok, status: res.status, result: json };
+          } catch (err) {
+            console.error(`[PROXY POST ${action}] Error calling PAYMENTS_WEBHOOK_URL:`, err);
+            return { success: false, error: String(err) };
+          }
+        })();
+
+        const [sheetResult, paymentsResult] = await Promise.allSettled([sheetCall, paymentsCall]);
+
+        return jsonResponse(
+          {
+            success: true,
+            status: 200,
+            sheetResult:
+              sheetResult.status === "fulfilled"
+                ? sheetResult.value
+                : { error: String(sheetResult.reason) },
+            paymentsResult:
+              paymentsResult.status === "fulfilled"
+                ? paymentsResult.value
+                : { error: String(paymentsResult.reason) },
+          },
+          200,
+          {},
+          request,
+        );
       }
 
-      // If array is passed, don't stringify it in proxy. We let fetch JSON.stringify it naturally below
-      
+      // Other actions: updateCheckIn, updateMemberNames, delete, register
+      const targetUrl = SHEETS_WEBHOOK_URL;
+      const { url: _strippedUrl, ...actionPayload } = body;
+
+      if (action === "delete") {
+        actionPayload.action = "delete";
+      }
+
+      console.log(
+        `[PROXY POST ${action || "register"}] Calling SHEETS_WEBHOOK_URL (${targetUrl}):`,
+        JSON.stringify(actionPayload),
+      );
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 12000);
 
@@ -259,9 +413,6 @@ export async function handleRegistrationsProxy(
       });
 
       clearTimeout(timeout);
-      
-      // Invalidate GET cache
-      registrationsCache.delete("MERGED_REGISTRATIONS");
 
       const responseText = await upstreamRes.text().catch(() => "");
       let responseJson: unknown = null;
@@ -270,6 +421,11 @@ export async function handleRegistrationsProxy(
       } catch {
         responseJson = { raw: responseText };
       }
+
+      console.log(
+        `[PROXY POST ${action || "register"}] SHEETS response (status ${upstreamRes.status}):`,
+        JSON.stringify(responseJson),
+      );
 
       return jsonResponse(
         {
@@ -283,7 +439,6 @@ export async function handleRegistrationsProxy(
       );
     } catch (err) {
       console.error("Registrations proxy POST error:", err);
-      // Let it return 200 with success: false so the app can fallback.
       return jsonResponse(
         {
           success: false,

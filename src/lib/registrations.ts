@@ -52,7 +52,7 @@ export function getStoredRegistrations(): Registration[] {
   }
 }
 
-function getAuthToken(): string {
+export function getAuthToken(): string {
   if (typeof window === "undefined") return "";
   return sessionStorage.getItem("zeroth_admin_token") || "";
 }
