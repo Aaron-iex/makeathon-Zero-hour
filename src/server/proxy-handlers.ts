@@ -8,11 +8,6 @@ const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
 const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
 const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
 
-const DEFAULT_SHEETS_URL =
-  "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
-const DEFAULT_PAYMENTS_URL =
-  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
-
 interface CacheRecord {
   body: string;
   contentType: string;
@@ -111,14 +106,14 @@ export async function handleRegistrationsProxy(
     const paymentsUrlParam = url.searchParams.get("paymentsUrl") || "";
 
     const activeSheetsUrl =
-      (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+      activeSheetsEnv && !activeSheetsEnv.includes("dummy")
         ? activeSheetsEnv
-        : sheetsUrlParam) || DEFAULT_SHEETS_URL;
+        : sheetsUrlParam;
 
     const activePaymentsUrl =
-      (activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+      activePaymentsEnv && !activePaymentsEnv.includes("dummy")
         ? activePaymentsEnv
-        : paymentsUrlParam) || DEFAULT_PAYMENTS_URL;
+        : paymentsUrlParam;
 
     if (!activeSheetsUrl) {
       return jsonResponse({ error: "No SHEETS_WEBHOOK_URL configured" }, 500, {}, request);
@@ -359,14 +354,14 @@ export async function handleRegistrationsProxy(
               : "";
 
         const sheetsTargetUrl =
-          (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+          activeSheetsEnv && !activeSheetsEnv.includes("dummy")
             ? activeSheetsEnv
-            : incomingSheetsUrl) || DEFAULT_SHEETS_URL;
+            : incomingSheetsUrl;
 
         const paymentsTargetUrl =
-          (activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+          activePaymentsEnv && !activePaymentsEnv.includes("dummy")
             ? activePaymentsEnv
-            : incomingPaymentsUrl || incomingSheetsUrl) || DEFAULT_PAYMENTS_URL;
+            : incomingPaymentsUrl || incomingSheetsUrl;
 
         // 1. Sheets Webhook Payload (writes to Registrations Google Sheet)
         const sheetPayload = {
@@ -500,9 +495,9 @@ export async function handleRegistrationsProxy(
             : "";
 
       const targetUrl =
-        (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+        activeSheetsEnv && !activeSheetsEnv.includes("dummy")
           ? activeSheetsEnv
-          : incomingSheetsUrl) || DEFAULT_SHEETS_URL;
+          : incomingSheetsUrl;
 
       if (!targetUrl) {
         return jsonResponse(

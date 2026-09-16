@@ -97,16 +97,13 @@ export function deleteRegistrationLocally(id: string): void {
   saveAllRegistrations(filtered);
 }
 
-export const DEFAULT_SHEETS_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
-
 export function getGoogleSheetsWebhookUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_SHEETS_WEBHOOK_URL;
+  if (typeof window === "undefined") return "";
   const saved = localStorage.getItem(SHEETS_URL_KEY);
   if (saved && saved.startsWith("https://script.google.com")) {
     return saved.trim();
   }
-  return DEFAULT_SHEETS_WEBHOOK_URL;
+  return "";
 }
 
 export function setGoogleSheetsWebhookUrl(url: string): void {
@@ -114,16 +111,13 @@ export function setGoogleSheetsWebhookUrl(url: string): void {
   localStorage.setItem(SHEETS_URL_KEY, url.trim());
 }
 
-export const DEFAULT_PAYMENTS_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
-
 export function getPaymentsWebhookUrl(): string {
-  if (typeof window === "undefined") return DEFAULT_PAYMENTS_WEBHOOK_URL;
+  if (typeof window === "undefined") return "";
   const saved = localStorage.getItem(PAYMENTS_URL_KEY);
   if (saved && saved.startsWith("https://script.google.com")) {
     return saved.trim();
   }
-  return DEFAULT_PAYMENTS_WEBHOOK_URL;
+  return "";
 }
 
 export function setPaymentsWebhookUrl(url: string): void {
