@@ -114,9 +114,16 @@ export function setGoogleSheetsWebhookUrl(url: string): void {
   localStorage.setItem(SHEETS_URL_KEY, url.trim());
 }
 
+export const DEFAULT_PAYMENTS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
+
 export function getPaymentsWebhookUrl(): string {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(PAYMENTS_URL_KEY) || "";
+  if (typeof window === "undefined") return DEFAULT_PAYMENTS_WEBHOOK_URL;
+  const saved = localStorage.getItem(PAYMENTS_URL_KEY);
+  if (saved && saved.startsWith("https://script.google.com")) {
+    return saved.trim();
+  }
+  return DEFAULT_PAYMENTS_WEBHOOK_URL;
 }
 
 export function setPaymentsWebhookUrl(url: string): void {

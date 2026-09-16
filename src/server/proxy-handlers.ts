@@ -10,6 +10,8 @@ const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
 
 const DEFAULT_SHEETS_URL =
   "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
+const DEFAULT_PAYMENTS_URL =
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
 
 interface CacheRecord {
   body: string;
@@ -114,9 +116,9 @@ export async function handleRegistrationsProxy(
         : sheetsUrlParam) || DEFAULT_SHEETS_URL;
 
     const activePaymentsUrl =
-      activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+      (activePaymentsEnv && !activePaymentsEnv.includes("dummy")
         ? activePaymentsEnv
-        : paymentsUrlParam;
+        : paymentsUrlParam) || DEFAULT_PAYMENTS_URL;
 
     if (!activeSheetsUrl) {
       return jsonResponse({ error: "No SHEETS_WEBHOOK_URL configured" }, 500, {}, request);
@@ -362,9 +364,9 @@ export async function handleRegistrationsProxy(
             : incomingSheetsUrl) || DEFAULT_SHEETS_URL;
 
         const paymentsTargetUrl =
-          activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+          (activePaymentsEnv && !activePaymentsEnv.includes("dummy")
             ? activePaymentsEnv
-            : incomingPaymentsUrl || incomingSheetsUrl;
+            : incomingPaymentsUrl || incomingSheetsUrl) || DEFAULT_PAYMENTS_URL;
 
         // 1. Sheets Webhook Payload (writes to Registrations Google Sheet)
         const sheetPayload = {
