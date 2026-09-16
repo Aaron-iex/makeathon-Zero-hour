@@ -588,6 +588,9 @@ export async function fetchRemoteRegistrations(
         },
         signal: controller.signal,
       });
+      if (proxyRes.status === 401) {
+        return { success: false, data: [], message: "Unauthorized" };
+      }
       const ct = proxyRes.headers.get("content-type") || "";
       if (proxyRes.ok && ct.includes("application/json")) {
         const parsedData = await proxyRes.json();

@@ -318,7 +318,10 @@ const AUTH_SESSION_KEY = "zeroth_admin_auth";
 export function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== "undefined") {
-      return sessionStorage.getItem(AUTH_SESSION_KEY) === "true";
+      return (
+        sessionStorage.getItem(AUTH_SESSION_KEY) === "true" &&
+        Boolean(sessionStorage.getItem("zeroth_admin_token"))
+      );
     }
     return false;
   });
@@ -413,6 +416,15 @@ export function AdminDashboard() {
   const isSyncingRef = useRef(false);
   const isAutoRefreshingRef = useRef(false);
 
+  const handleLogout = useCallback(() => {
+    clearStoredRegistrations();
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem("zeroth_admin_token");
+    setIsAuthenticated(false);
+    setRegistrations([]);
+    setPinInput("");
+  }, []);
+
   // Manual Sync (can bypass short cache)
   const handleSyncRemote = useCallback(
     async (forceFresh = false) => {
@@ -425,6 +437,10 @@ export function AdminDashboard() {
           clearStoredRegistrations();
         }
         const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
+        if (res.message === "Unauthorized") {
+          handleLogout();
+          return;
+        }
         if (res.success && res.data) {
           setRegistrations(res.data);
         } else {
@@ -445,7 +461,7 @@ export function AdminDashboard() {
         setIsSyncing(false);
       }
     },
-    [webhookUrl, loadData],
+    [webhookUrl, loadData, handleLogout],
   );
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -480,15 +496,6 @@ export function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    clearStoredRegistrations();
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
-    sessionStorage.removeItem("zeroth_admin_token");
-    setIsAuthenticated(false);
-    setRegistrations([]);
-    setPinInput("");
-  };
-
   // Gentle auto-refresh against cached proxy endpoint every 25 seconds
   const handleGentleAutoRefresh = useCallback(async () => {
     if (isSyncingRef.current || isAutoRefreshingRef.current) return;
@@ -496,6 +503,10 @@ export function AdminDashboard() {
     setIsAutoRefreshing(true);
     try {
       const res = await fetchRemoteRegistrations(webhookUrl);
+      if (res.message === "Unauthorized") {
+        handleLogout();
+        return;
+      }
       if (res.success && res.data) {
         setRegistrations(res.data);
       }
@@ -512,7 +523,7 @@ export function AdminDashboard() {
       isAutoRefreshingRef.current = false;
       setIsAutoRefreshing(false);
     }
-  }, [webhookUrl]);
+  }, [webhookUrl, handleLogout]);
 
   // Initial background fetch on mount + interval timer (non-blocking)
   useEffect(() => {
