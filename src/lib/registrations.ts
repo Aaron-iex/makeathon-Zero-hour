@@ -40,11 +40,7 @@ export const DUAL_SYNC_GOOGLE_FORM_RESPONSE_URL =
 export function getStoredRegistrations(): Registration[] {
   if (typeof window === "undefined") return [];
   try {
-    // Migration & cleanup: Remove legacy persistent cache from localStorage
-    if (localStorage.getItem(STORAGE_KEY)) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     console.error("Error reading registrations:", e);
@@ -54,13 +50,19 @@ export function getStoredRegistrations(): Registration[] {
 
 export function getAuthToken(): string {
   if (typeof window === "undefined") return "";
-  return sessionStorage.getItem("zeroth_admin_token") || "";
+  return (
+    localStorage.getItem("zeroth_admin_token") ||
+    sessionStorage.getItem("zeroth_admin_token") ||
+    ""
+  );
 }
 
 export function saveAllRegistrations(list: Registration[]): void {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    sessionStorage.setItem(STORAGE_KEY, serialized);
     window.dispatchEvent(new Event("zeroth_registration_updated"));
   } catch (e) {
     console.error("Error saving registrations:", e);
@@ -97,13 +99,16 @@ export function deleteRegistrationLocally(id: string): void {
   saveAllRegistrations(filtered);
 }
 
+export const DEFAULT_SHEETS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
+
 export function getGoogleSheetsWebhookUrl(): string {
-  if (typeof window === "undefined") return "";
+  if (typeof window === "undefined") return DEFAULT_SHEETS_WEBHOOK_URL;
   const saved = localStorage.getItem(SHEETS_URL_KEY);
   if (saved && saved.startsWith("https://script.google.com")) {
     return saved.trim();
   }
-  return "";
+  return DEFAULT_SHEETS_WEBHOOK_URL;
 }
 
 export function setGoogleSheetsWebhookUrl(url: string): void {
@@ -111,13 +116,16 @@ export function setGoogleSheetsWebhookUrl(url: string): void {
   localStorage.setItem(SHEETS_URL_KEY, url.trim());
 }
 
+export const DEFAULT_PAYMENTS_WEBHOOK_URL =
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
+
 export function getPaymentsWebhookUrl(): string {
-  if (typeof window === "undefined") return "";
+  if (typeof window === "undefined") return DEFAULT_PAYMENTS_WEBHOOK_URL;
   const saved = localStorage.getItem(PAYMENTS_URL_KEY);
   if (saved && saved.startsWith("https://script.google.com")) {
     return saved.trim();
   }
-  return "";
+  return DEFAULT_PAYMENTS_WEBHOOK_URL;
 }
 
 export function setPaymentsWebhookUrl(url: string): void {
@@ -586,6 +594,7 @@ export async function fetchRemoteRegistrations(
 
     // Call caching proxy endpoint first
     let json: unknown = null;
+    let isFromProxy = false;
     try {
       const proxyUrl = `/api/registrations?sheetsUrl=${encodeURIComponent(url)}&paymentsUrl=${encodeURIComponent(paymentsUrl)}&url=${encodeURIComponent(url)}${options?.forceFresh ? "&fresh=1" : ""}`;
       const proxyRes = await fetch(proxyUrl, {
@@ -604,6 +613,7 @@ export async function fetchRemoteRegistrations(
         const parsedData = await proxyRes.json();
         if (Array.isArray(parsedData)) {
           json = parsedData;
+          isFromProxy = true;
         }
       }
       if (!json) {
@@ -694,23 +704,28 @@ export async function fetchRemoteRegistrations(
         syncedToRemote: true,
       }));
 
-      // Pull payment statuses in background / parallel and merge client-side
-      const payments = await fetchPaymentStatuses(
-        undefined,
-        options?.forceFresh ? { forceFresh: true } : {},
-      ).catch(() => ({ success: false, data: {} }));
-      const paymentMap: Record<string, { paid?: boolean; paymentRef?: string }> = payments.data || {};
+      // Pull payment statuses only if direct fallback was used (proxy already merged them)
+      let paymentMap: Record<string, { paid?: boolean; paymentRef?: string }> = {};
+      if (!isFromProxy) {
+        const payments = await fetchPaymentStatuses(
+          undefined,
+          options?.forceFresh ? { forceFresh: true } : {},
+        ).catch(() => ({ success: false, data: {} }));
+        paymentMap = payments.data || {};
+      }
 
       // Merge with local records
       const local = getStoredRegistrations();
       const map = new Map<string, Registration>();
 
-      // 1. Put remote first and enrich with payments (safely merge duplicates)
+      // 1. Put remote first and enrich with payments if direct fallback was used (safely merge duplicates)
       parsed.forEach((r) => {
-        const payInfo = paymentMap[r.id];
-        if (payInfo) {
-          r.paid = payInfo.paid;
-          if (payInfo.paymentRef !== undefined) r.paymentRef = payInfo.paymentRef;
+        if (!isFromProxy) {
+          const payInfo = paymentMap[r.id];
+          if (payInfo) {
+            r.paid = payInfo.paid;
+            if (payInfo.paymentRef !== undefined) r.paymentRef = payInfo.paymentRef;
+          }
         }
         r.source = "remote";
         r.syncedToRemote = true;

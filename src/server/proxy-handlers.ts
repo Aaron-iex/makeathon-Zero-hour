@@ -8,6 +8,11 @@ const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
 const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
 const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
 
+const VERIFIED_SHEETS_URL =
+  "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
+const VERIFIED_PAYMENTS_URL =
+  "https://script.google.com/macros/s/AKfycbxksTqZOBYTFQ1KtnYd1B-ZTsWrvJdVwIiYDGcElwZjQB4AQQ-lg_5fiXl_5h-CYBg_/exec";
+
 interface CacheRecord {
   body: string;
   contentType: string;
@@ -106,56 +111,98 @@ export async function handleRegistrationsProxy(
     const paymentsUrlParam = url.searchParams.get("paymentsUrl") || "";
 
     const activeSheetsUrl =
-      activeSheetsEnv && !activeSheetsEnv.includes("dummy")
-        ? activeSheetsEnv
-        : sheetsUrlParam;
+      sheetsUrlParam && sheetsUrlParam.startsWith("https://script.google.com")
+        ? sheetsUrlParam
+        : activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+          ? activeSheetsEnv
+          : VERIFIED_SHEETS_URL;
 
     const activePaymentsUrl =
-      activePaymentsEnv && !activePaymentsEnv.includes("dummy")
-        ? activePaymentsEnv
-        : paymentsUrlParam;
-
-    if (!activeSheetsUrl) {
-      return jsonResponse({ error: "No SHEETS_WEBHOOK_URL configured" }, 500, {}, request);
-    }
+      paymentsUrlParam && paymentsUrlParam.startsWith("https://script.google.com")
+        ? paymentsUrlParam
+        : activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+          ? activePaymentsEnv
+          : VERIFIED_PAYMENTS_URL;
 
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const sheetsController = new AbortController();
+      const sheetsTimeout = setTimeout(() => sheetsController.abort(), 20000);
 
-      const fetchSheets = fetch(
-        `${activeSheetsUrl}${activeSheetsUrl.includes("?") ? "&" : "?"}_t=${now}`,
-        {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          signal: controller.signal,
-        },
-      ).then((r) => {
-        if (!r.ok) throw new Error(`Sheets returned ${r.status}`);
-        return r.json();
-      });
+      const paymentsController = new AbortController();
+      const paymentsTimeout = setTimeout(() => paymentsController.abort(), 8000);
 
-      const fetchPayments = activePaymentsUrl
-        ? fetch(
+      const fetchSheets = (async () => {
+        try {
+          const r = await fetch(
+            `${activeSheetsUrl}${activeSheetsUrl.includes("?") ? "&" : "?"}_t=${now}`,
+            {
+              method: "GET",
+              headers: { Accept: "application/json" },
+              redirect: "follow",
+              signal: sheetsController.signal,
+            },
+          );
+          if (r.ok) {
+            return await r.json();
+          }
+          throw new Error(`Sheets returned ${r.status}`);
+        } catch (err) {
+          if (activeSheetsUrl !== VERIFIED_SHEETS_URL) {
+            console.warn("Proxy: primary sheets URL failed, trying verified fallback:", err);
+            const fallbackRes = await fetch(
+              `${VERIFIED_SHEETS_URL}${VERIFIED_SHEETS_URL.includes("?") ? "&" : "?"}_t=${now}`,
+              {
+                method: "GET",
+                headers: { Accept: "application/json" },
+                redirect: "follow",
+                signal: sheetsController.signal,
+              },
+            );
+            if (fallbackRes.ok) {
+              return await fallbackRes.json();
+            }
+          }
+          throw err;
+        } finally {
+          clearTimeout(sheetsTimeout);
+        }
+      })();
+
+      const fetchPayments = (async () => {
+        if (!activePaymentsUrl) return [];
+        try {
+          const r = await fetch(
             `${activePaymentsUrl}${activePaymentsUrl.includes("?") ? "&" : "?"}_t=${now}`,
             {
               method: "GET",
               headers: { Accept: "application/json" },
-              signal: controller.signal,
+              redirect: "follow",
+              signal: paymentsController.signal,
             },
-          )
-            .then((r) => {
-              if (!r.ok) throw new Error(`Payments returned ${r.status}`);
-              return r.json();
-            })
-            .catch((err) => {
-              console.warn("Proxy: Failed to fetch payments:", err);
-              return [];
-            })
-        : Promise.resolve([]);
+          );
+          if (r.ok) {
+            return await r.json();
+          }
+          return [];
+        } catch (err) {
+          console.warn("Proxy: Failed to fetch payments (non-fatal):", err);
+          return [];
+        } finally {
+          clearTimeout(paymentsTimeout);
+        }
+      })();
 
-      const [sheetsData, paymentsData] = await Promise.all([fetchSheets, fetchPayments]);
-      clearTimeout(timeout);
+      const [sheetsResult, paymentsResult] = await Promise.allSettled([fetchSheets, fetchPayments]);
+
+      let sheetsData: any = null;
+      if (sheetsResult.status === "fulfilled") {
+        sheetsData = sheetsResult.value;
+      } else {
+        throw sheetsResult.reason;
+      }
+
+      const paymentsData =
+        paymentsResult.status === "fulfilled" ? paymentsResult.value : [];
       
       // Process Sheets Data & Deduplicate by ID (protecting against blank duplicate rows)
       const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
@@ -286,6 +333,7 @@ export async function handleRegistrationsProxy(
         {
           success: false,
           error: "Upstream Google Sheet fetch failed or timed out",
+          detail: err instanceof Error ? err.message : String(err),
         },
         502,
         {},
@@ -354,14 +402,17 @@ export async function handleRegistrationsProxy(
               : "";
 
         const sheetsTargetUrl =
-          activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+          incomingSheetsUrl ||
+          (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
             ? activeSheetsEnv
-            : incomingSheetsUrl;
+            : VERIFIED_SHEETS_URL);
 
         const paymentsTargetUrl =
-          activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+          incomingPaymentsUrl ||
+          incomingSheetsUrl ||
+          (activePaymentsEnv && !activePaymentsEnv.includes("dummy")
             ? activePaymentsEnv
-            : incomingPaymentsUrl || incomingSheetsUrl;
+            : VERIFIED_PAYMENTS_URL);
 
         // 1. Sheets Webhook Payload (writes to Registrations Google Sheet)
         const sheetPayload = {
@@ -495,9 +546,10 @@ export async function handleRegistrationsProxy(
             : "";
 
       const targetUrl =
-        activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+        incomingSheetsUrl ||
+        (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
           ? activeSheetsEnv
-          : incomingSheetsUrl;
+          : VERIFIED_SHEETS_URL);
 
       if (!targetUrl) {
         return jsonResponse(

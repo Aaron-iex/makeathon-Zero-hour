@@ -318,10 +318,13 @@ const AUTH_SESSION_KEY = "zeroth_admin_auth";
 export function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     if (typeof window !== "undefined") {
-      return (
-        sessionStorage.getItem(AUTH_SESSION_KEY) === "true" &&
-        Boolean(sessionStorage.getItem("zeroth_admin_token"))
-      );
+      const isAuth =
+        sessionStorage.getItem(AUTH_SESSION_KEY) === "true" ||
+        localStorage.getItem(AUTH_SESSION_KEY) === "true";
+      const token =
+        sessionStorage.getItem("zeroth_admin_token") ||
+        localStorage.getItem("zeroth_admin_token");
+      return Boolean(isAuth && token);
     }
     return false;
   });
@@ -420,6 +423,8 @@ export function AdminDashboard() {
     clearStoredRegistrations();
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem("zeroth_admin_token");
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    localStorage.removeItem("zeroth_admin_token");
     setIsAuthenticated(false);
     setRegistrations([]);
     setPinInput("");
@@ -433,16 +438,14 @@ export function AdminDashboard() {
       isSyncingRef.current = true;
       setIsSyncing(true);
       try {
-        if (isFresh) {
-          clearStoredRegistrations();
-        }
         const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
         if (res.message === "Unauthorized") {
           handleLogout();
           return;
         }
-        if (res.success && res.data) {
+        if (res.success && res.data && res.data.length > 0) {
           setRegistrations(res.data);
+          saveAllRegistrations(res.data);
         } else {
           loadData();
         }
@@ -481,9 +484,8 @@ export function AdminDashboard() {
         setIsAuthenticated(true);
         sessionStorage.setItem(AUTH_SESSION_KEY, "true");
         sessionStorage.setItem("zeroth_admin_token", data.token);
-        // Clean stale browser storage on login and sync fresh from Google Sheets
-        clearStoredRegistrations();
-        setRegistrations([]);
+        localStorage.setItem(AUTH_SESSION_KEY, "true");
+        localStorage.setItem("zeroth_admin_token", data.token);
         await handleSyncRemote(true);
       } else {
         setPinError(true);
