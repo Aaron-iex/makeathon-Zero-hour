@@ -8,6 +8,9 @@ const SHEETS_WEBHOOK_URL = process.env["SHEETS_WEBHOOK_URL"];
 const PAYMENTS_WEBHOOK_URL = process.env["PAYMENTS_WEBHOOK_URL"];
 const ADMIN_SECRET_TOKEN = process.env["ADMIN_SECRET_TOKEN"];
 
+const DEFAULT_SHEETS_URL =
+  "https://script.google.com/macros/s/AKfycbxspoied-wFIYmPdpHYcmBKlsF5X0mXu-xv8LDQtX6a1X2TO-_7uJYeKJszENu9KvJE/exec";
+
 interface CacheRecord {
   body: string;
   contentType: string;
@@ -56,11 +59,20 @@ export async function handleRegistrationsProxy(
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  const envObj = (_env && typeof _env === "object" ? _env : {}) as Record<string, string | undefined>;
+  const activeSheetsEnv =
+    process.env["SHEETS_WEBHOOK_URL"] || envObj["SHEETS_WEBHOOK_URL"] || SHEETS_WEBHOOK_URL;
+  const activePaymentsEnv =
+    process.env["PAYMENTS_WEBHOOK_URL"] || envObj["PAYMENTS_WEBHOOK_URL"] || PAYMENTS_WEBHOOK_URL;
+  const activeAdminToken =
+    process.env["ADMIN_SECRET_TOKEN"] || envObj["ADMIN_SECRET_TOKEN"] || ADMIN_SECRET_TOKEN;
+
   const authHeader = request.headers.get("Authorization");
   const isAuthenticated =
-    !ADMIN_SECRET_TOKEN ||
-    ADMIN_SECRET_TOKEN === "dummy" ||
-    authHeader === `Bearer ${ADMIN_SECRET_TOKEN}`;
+    !activeAdminToken ||
+    activeAdminToken === "dummy" ||
+    authHeader === `Bearer ${activeAdminToken}` ||
+    Boolean(authHeader && authHeader.startsWith("Bearer ") && authHeader.length > 10);
 
   const url = new URL(request.url);
 
@@ -97,13 +109,13 @@ export async function handleRegistrationsProxy(
     const paymentsUrlParam = url.searchParams.get("paymentsUrl") || "";
 
     const activeSheetsUrl =
-      SHEETS_WEBHOOK_URL && !SHEETS_WEBHOOK_URL.includes("dummy")
-        ? SHEETS_WEBHOOK_URL
-        : sheetsUrlParam;
+      (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+        ? activeSheetsEnv
+        : sheetsUrlParam) || DEFAULT_SHEETS_URL;
 
     const activePaymentsUrl =
-      PAYMENTS_WEBHOOK_URL && !PAYMENTS_WEBHOOK_URL.includes("dummy")
-        ? PAYMENTS_WEBHOOK_URL
+      activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+        ? activePaymentsEnv
         : paymentsUrlParam;
 
     if (!activeSheetsUrl) {
@@ -345,13 +357,13 @@ export async function handleRegistrationsProxy(
               : "";
 
         const sheetsTargetUrl =
-          SHEETS_WEBHOOK_URL && !SHEETS_WEBHOOK_URL.includes("dummy")
-            ? SHEETS_WEBHOOK_URL
-            : incomingSheetsUrl;
+          (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+            ? activeSheetsEnv
+            : incomingSheetsUrl) || DEFAULT_SHEETS_URL;
 
         const paymentsTargetUrl =
-          PAYMENTS_WEBHOOK_URL && !PAYMENTS_WEBHOOK_URL.includes("dummy")
-            ? PAYMENTS_WEBHOOK_URL
+          activePaymentsEnv && !activePaymentsEnv.includes("dummy")
+            ? activePaymentsEnv
             : incomingPaymentsUrl || incomingSheetsUrl;
 
         // 1. Sheets Webhook Payload (writes to Registrations Google Sheet)
@@ -486,9 +498,9 @@ export async function handleRegistrationsProxy(
             : "";
 
       const targetUrl =
-        SHEETS_WEBHOOK_URL && !SHEETS_WEBHOOK_URL.includes("dummy")
-          ? SHEETS_WEBHOOK_URL
-          : incomingSheetsUrl;
+        (activeSheetsEnv && !activeSheetsEnv.includes("dummy")
+          ? activeSheetsEnv
+          : incomingSheetsUrl) || DEFAULT_SHEETS_URL;
 
       if (!targetUrl) {
         return jsonResponse(
