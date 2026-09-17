@@ -614,10 +614,12 @@ export async function fetchRemoteRegistrations(
         if (Array.isArray(parsedData)) {
           json = parsedData;
           isFromProxy = true;
+        } else if (parsedData && parsedData.error) {
+          throw new Error(parsedData.error);
         }
       }
       if (!json) {
-        throw new Error("Proxy did not return valid registration array");
+        throw new Error(`Proxy status ${proxyRes.status}: invalid response`);
       }
     } catch (proxyErr) {
       console.warn(
@@ -628,14 +630,23 @@ export async function fetchRemoteRegistrations(
       if (!url) {
         return { success: false, data: [], message: "No Google Sheets webhook URL configured." };
       }
-      const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      if (directRes.ok) {
-        json = await directRes.json().catch(() => null);
+      const directController = new AbortController();
+      const directTimer = setTimeout(() => directController.abort(), 12000);
+      try {
+        const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          redirect: "follow",
+          signal: directController.signal,
+        });
+        clearTimeout(directTimer);
+        if (directRes.ok) {
+          json = await directRes.json().catch(() => null);
+        }
+      } catch (directErr) {
+        clearTimeout(directTimer);
+        console.warn("Direct Google Sheets fallback failed:", directErr);
       }
     }
 
@@ -820,7 +831,7 @@ export async function fetchRemoteRegistrations(
     }
 
     return {
-      success: true,
+      success: false,
       data: getStoredRegistrations(),
       message: "Remote replied, but no array found.",
     };

@@ -126,7 +126,7 @@ export async function handleRegistrationsProxy(
 
     try {
       const sheetsController = new AbortController();
-      const sheetsTimeout = setTimeout(() => sheetsController.abort(), 20000);
+      const sheetsTimeout = setTimeout(() => sheetsController.abort(), 15000);
 
       const paymentsController = new AbortController();
       const paymentsTimeout = setTimeout(() => paymentsController.abort(), 8000);
@@ -229,24 +229,57 @@ export async function handleRegistrationsProxy(
       let payArray: any[] = [];
       if (Array.isArray(paymentsData)) {
         payArray = paymentsData;
-      } else if (paymentsData && Array.isArray(paymentsData.data)) {
-        payArray = paymentsData.data;
+      } else if (paymentsData && typeof paymentsData === "object" && Array.isArray((paymentsData as any).data)) {
+        payArray = (paymentsData as any).data;
       }
       
-      const paymentMap = new Map<string, { paid: boolean, paymentRef: string }>();
+      const paymentMap = new Map<string, { paid: boolean; paymentRef: string }>();
       for (const p of payArray) {
-        if (p.id) {
-          paymentMap.set(String(p.id), {
-             paid: true,
-             paymentRef: p.paymentRef || ""
+        const pId = String(p.id || p.ID || p["Pass ID"] || "").trim();
+        if (!pId) continue;
+        const pPaid =
+          p.paid === true ||
+          String(p.paid || "").toLowerCase() === "true" ||
+          String(p.paid || "").toUpperCase() === "YES" ||
+          String(p.status || "").toLowerCase() === "paid" ||
+          Boolean(p.paymentRef);
+        const pRef = String(p.paymentRef || p.referenceId || p["Payment Ref"] || "").trim();
+        if (pPaid || pRef) {
+          paymentMap.set(pId, {
+            paid: true,
+            paymentRef: pRef,
           });
         }
       }
 
-      // Merge
+      // Merge: Sheets data is primary for paid/paymentRef, Comms log is supplementary
       const merged = uniqueRegs.map((reg: any) => {
         const id = String(reg.id || reg.ID || "");
         const pData = paymentMap.get(id);
+
+        // Direct Sheet fields (columns M and N)
+        const sheetPaid =
+          reg.paid === true ||
+          String(reg.paid || "").toLowerCase() === "true" ||
+          String(reg.paid || "").toUpperCase() === "YES" ||
+          String(reg["Paid"] || "").toUpperCase() === "YES" ||
+          String(reg.status || "").toLowerCase() === "paid";
+
+        const sheetPaymentRef = String(
+          reg.paymentRef ||
+            reg["Payment Ref"] ||
+            reg["payment_ref"] ||
+            reg["Payment Reference ID"] ||
+            "",
+        ).trim();
+
+        // Supplementary Comms log source
+        const commsPaid = Boolean(pData && pData.paid);
+        const commsPaymentRef = String((pData && pData.paymentRef) || "").trim();
+
+        // Either source says paid => paid=true
+        const isPaid = sheetPaid || commsPaid || Boolean(sheetPaymentRef || commsPaymentRef);
+        const finalPaymentRef = sheetPaymentRef || commsPaymentRef || "";
         
         let memberNames: string[] = [];
         const rawMembers =
@@ -289,8 +322,8 @@ export async function handleRegistrationsProxy(
           source: "cloud",
           syncedToRemote: true,
           status: "confirmed",
-          paid: pData ? pData.paid : false,
-          paymentRef: pData ? pData.paymentRef : ""
+          paid: isPaid,
+          paymentRef: finalPaymentRef,
         };
       });
 
@@ -314,7 +347,7 @@ export async function handleRegistrationsProxy(
       });
       
     } catch (err) {
-      console.warn("Registrations upstream fetch error:", err);
+      console.error("Registrations upstream fetch error in proxy-handlers:", err);
 
       const stale = registrationsCache.get(cacheKey);
       if (stale) {
@@ -332,8 +365,8 @@ export async function handleRegistrationsProxy(
       return jsonResponse(
         {
           success: false,
-          error: "Upstream Google Sheet fetch failed or timed out",
-          detail: err instanceof Error ? err.message : String(err),
+          error: `Upstream Google Sheet fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+          detail: err instanceof Error ? err.stack || err.message : String(err),
         },
         502,
         {},
@@ -353,7 +386,7 @@ export async function handleRegistrationsProxy(
       }
 
       // Invalidate GET cache immediately upon any write action
-      registrationsCache.delete("MERGED_REGISTRATIONS");
+      registrationsCache.clear();
 
       const id = String(body["id"] || "");
       const isPaymentAction =

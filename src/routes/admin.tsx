@@ -354,6 +354,7 @@ export function AdminDashboard() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -437,16 +438,30 @@ export function AdminDashboard() {
       if (isSyncingRef.current) return;
       isSyncingRef.current = true;
       setIsSyncing(true);
+      setSyncError(null);
+
+      // Task 1 Step 3: Never stay in infinite "Syncing..." state — timeout of 20 seconds
+      const syncTimeout = setTimeout(() => {
+        if (isSyncingRef.current) {
+          isSyncingRef.current = false;
+          setIsSyncing(false);
+          setSyncError("Sync failed — click Sync Live to retry");
+        }
+      }, 20000);
+
       try {
         const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
+        clearTimeout(syncTimeout);
         if (res.message === "Unauthorized") {
           handleLogout();
           return;
         }
-        if (res.success && res.data && res.data.length > 0) {
+        if (res.success && res.data) {
+          setSyncError(null);
           setRegistrations(res.data);
           saveAllRegistrations(res.data);
         } else {
+          setSyncError(res.message || "Sync failed — click Sync Live to retry");
           loadData();
         }
         setLastSyncTime(
@@ -457,9 +472,12 @@ export function AdminDashboard() {
           }),
         );
       } catch (err) {
-        console.warn("Sync error:", err);
+        clearTimeout(syncTimeout);
+        console.error("Sync error:", err);
+        setSyncError("Sync failed — click Sync Live to retry");
         loadData();
       } finally {
+        clearTimeout(syncTimeout);
         isSyncingRef.current = false;
         setIsSyncing(false);
       }
@@ -498,7 +516,7 @@ export function AdminDashboard() {
     }
   };
 
-  // Gentle auto-refresh against cached proxy endpoint every 25 seconds
+  // Gentle auto-refresh against cached proxy endpoint in background (silent sync)
   const handleGentleAutoRefresh = useCallback(async () => {
     if (isSyncingRef.current || isAutoRefreshingRef.current) return;
     isAutoRefreshingRef.current = true;
@@ -510,7 +528,9 @@ export function AdminDashboard() {
         return;
       }
       if (res.success && res.data) {
+        setSyncError(null);
         setRegistrations(res.data);
+        saveAllRegistrations(res.data);
       }
       setLastSyncTime(
         new Date().toLocaleTimeString([], {
@@ -527,15 +547,32 @@ export function AdminDashboard() {
     }
   }, [webhookUrl, handleLogout]);
 
-  // Initial background fetch on mount + interval timer (non-blocking)
+  // Task 4: Polling every 30s when tab is visible + immediate fetch on visibilitychange
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Fetch fresh data in background immediately; UI already shows cached registrations
+    // 1. Initial background fetch on mount
     handleGentleAutoRefresh();
 
-    
-    return;
+    // 2. Poll every 30s if admin tab is visible
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        handleGentleAutoRefresh();
+      }
+    }, 30000);
+
+    // 3. Immediate fetch on visibilitychange (returning to tab)
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        handleGentleAutoRefresh();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [isAuthenticated, handleGentleAutoRefresh]);
 
   const handleSelectSquad = useCallback((squad: Registration) => {
@@ -1024,6 +1061,25 @@ export function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        {syncError && (
+          <div className="flex items-center justify-between p-3.5 bg-amber-950/40 border border-amber-800/60 rounded-xl text-xs font-mono-tech text-amber-300">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="size-4 shrink-0 text-amber-400" />
+              <span>{syncError}</span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSyncRemote(true)}
+              disabled={isSyncing}
+              className="h-7 px-2.5 text-[11px] font-mono-tech border-amber-800/80 hover:bg-amber-900/30 text-amber-200"
+            >
+              <RefreshCw className={`size-3 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+              Retry Sync
+            </Button>
+          </div>
+        )}
+
         {/* KPI Metrics Row */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-4 sm:p-5 relative overflow-hidden">
@@ -1293,10 +1349,24 @@ export function AdminDashboard() {
                 NO MATCHING SQUADS FOUND
               </p>
               <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                {registrations.length === 0
+                {syncError
+                  ? syncError
+                  : registrations.length === 0
                   ? "No registrations entered yet. When students register on the website, they will immediately appear here."
                   : "Try clearing your search query or adjusting your filters."}
               </p>
+              {registrations.length === 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSyncRemote(true)}
+                  disabled={isSyncing}
+                  className="mt-4 font-mono-tech text-xs border-neutral-700 text-neutral-200 hover:bg-neutral-800"
+                >
+                  <RefreshCw className={`size-3.5 mr-1.5 ${isSyncing ? "animate-spin text-primary" : ""}`} />
+                  {isSyncing ? "Syncing..." : "Sync Live"}
+                </Button>
+              )}
               {registrations.length > 0 && (
                 <Button
                   variant="outline"
