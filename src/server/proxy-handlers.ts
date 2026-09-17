@@ -230,7 +230,7 @@ export async function handleRegistrationsProxy(
       const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
       const deduplicatedMap = new Map<string, any>();
       for (const reg of rawRegs) {
-        const id = String(reg.id || reg.ID || "").trim();
+        const id = String(reg.id || reg.ID || reg["Pass ID"] || "").trim();
         if (!id) continue;
         if (!deduplicatedMap.has(id)) {
           deduplicatedMap.set(id, reg);
@@ -238,7 +238,9 @@ export async function handleRegistrationsProxy(
           const existing = deduplicatedMap.get(id);
           const mergedItem = { ...existing };
           for (const [k, v] of Object.entries(reg)) {
-            if (v && (!existing[k] || String(existing[k]).trim() === "")) {
+            const existingVal = String(existing[k] ?? "").trim();
+            const newVal = String(v ?? "").trim();
+            if (newVal !== "" && (existingVal === "" || existingVal === "Unnamed Squad" || existingVal === "Unknown")) {
               mergedItem[k] = v;
             }
           }
@@ -276,7 +278,7 @@ export async function handleRegistrationsProxy(
 
       // Merge: Sheets data is primary for paid/paymentRef, Comms log is supplementary
       const merged = uniqueRegs.map((reg: any) => {
-        const id = String(reg.id || reg.ID || "");
+        const id = String(reg.id || reg.ID || reg["Pass ID"] || "");
         const pData = paymentMap.get(id);
 
         // Direct Sheet fields (columns M and N)
@@ -328,17 +330,107 @@ export async function handleRegistrationsProxy(
           }
         }
 
+        const teamName = String(
+          reg.teamName ||
+            reg["Team Name"] ||
+            reg["Squad Name"] ||
+            reg["TeamName"] ||
+            reg["Team name"] ||
+            reg["squad_name"] ||
+            reg["team_name"] ||
+            reg.SquadName ||
+            "",
+        ).trim();
+
+        const leaderName = String(
+          reg.leaderName ||
+            reg["Leader Name"] ||
+            reg["LeaderName"] ||
+            reg["Leader name"] ||
+            reg["Name"] ||
+            reg.Name ||
+            reg["Full Name"] ||
+            "",
+        ).trim();
+
+        const email = String(
+          reg.email ||
+            reg.Email ||
+            reg["Email Address"] ||
+            reg["Email address"] ||
+            reg["Contact Email"] ||
+            "",
+        ).trim();
+
+        const phone = String(
+          reg.phone ||
+            reg.Phone ||
+            reg["Mobile Number"] ||
+            reg["Mobile number"] ||
+            reg.Mobile ||
+            reg.Contact ||
+            reg["Phone Number"] ||
+            "",
+        ).trim();
+
+        const institution = String(
+          reg.institution ||
+            reg.Institution ||
+            reg["Institution / College"] ||
+            reg["Institution"] ||
+            reg["College"] ||
+            reg.College ||
+            reg.Organization ||
+            "",
+        ).trim();
+
+        const track = String(
+          reg.track ||
+            reg.Track ||
+            reg["Threat Sector"] ||
+            reg["Sector"] ||
+            reg.Sector ||
+            "Open Innovation",
+        ).trim();
+
+        const teamSize = String(
+          reg.teamSize ||
+            reg["Team Size"] ||
+            reg["Squad Size"] ||
+            reg["Squad size"] ||
+            reg.Size ||
+            "4",
+        ).trim();
+
+        const brief = String(
+          reg.brief ||
+            reg["Mission Brief"] ||
+            reg["Brief"] ||
+            reg.Brief ||
+            reg.Idea ||
+            "",
+        ).trim();
+
+        const timestamp = String(
+          reg.timestamp ||
+            reg.Timestamp ||
+            reg["Registered At"] ||
+            reg["Registered at"] ||
+            reg.Date ||
+            "",
+        ).trim();
+
         return {
           id,
-          teamName: String(reg.teamName || reg["Team Name"] || ""),
-          leaderName: String(reg.leaderName || reg["Leader Name"] || ""),
-          email: String(reg.email || reg.Email || ""),
-          phone: String(reg.phone || reg["Mobile Number"] || ""),
-          institution: String(reg.institution || reg.Institution || ""),
-          track: String(reg.track || reg.Track || reg["Threat Sector"] || ""),
-          teamSize: String(reg.teamSize || reg["Team Size"] || reg["Squad Size"] || "4"),
-          brief: String(reg.brief || reg["Mission Brief"] || ""),
-          timestamp: String(reg.timestamp || reg.Timestamp || reg["Registered At"] || ""),
+          teamName: teamName || "Unnamed Squad",
+          leaderName: leaderName || "Unknown",
+          email,
+          phone,
+          institution,
+          track,
+          teamSize,
+          brief,
+          timestamp: timestamp || new Date().toISOString(),
           checkedIn: String(reg.checkedIn || reg["Checked In"] || "").toUpperCase() === "YES" || reg.checkedIn === true,
           memberNames,
           source: "cloud",
@@ -518,7 +610,7 @@ export async function handleRegistrationsProxy(
           }
           try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 12000);
+            const timeout = setTimeout(() => controller.abort(), 20000);
             const res = await fetch(sheetsTargetUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -555,7 +647,7 @@ export async function handleRegistrationsProxy(
           }
           try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 12000);
+            const timeout = setTimeout(() => controller.abort(), 20000);
             const res = await fetch(paymentsTargetUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -640,7 +732,7 @@ export async function handleRegistrationsProxy(
       );
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
+      const timeout = setTimeout(() => controller.abort(), 20000);
 
       const upstreamRes = await fetch(targetUrl, {
         method: "POST",

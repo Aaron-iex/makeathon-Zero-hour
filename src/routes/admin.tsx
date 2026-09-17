@@ -13,6 +13,7 @@ import {
   fetchRemoteRegistrations,
   clearStoredRegistrations,
   syncCheckInToRemote,
+  syncAddSquadToRemote,
   syncDeleteToRemote,
   syncPaymentToRemote,
   getAuthToken,
@@ -51,6 +52,7 @@ import {
   CreditCard,
   MessageCircle,
   RotateCcw,
+  Loader2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin")({
@@ -382,6 +384,7 @@ export function AdminDashboard() {
   const [isMarkingPaid, setIsMarkingPaid] = useState(false);
   const [confirmUnpaid, setConfirmUnpaid] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isAddingSquad, setIsAddingSquad] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -785,8 +788,9 @@ export function AdminDashboard() {
     setTimeout(() => setCopiedId(null), 2000);
   }, []);
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsAddingSquad(true);
     const uniqueNum = Math.floor(100000 + Math.random() * 900000);
     const reg: Registration = {
       ...newSquad,
@@ -796,6 +800,7 @@ export function AdminDashboard() {
       checkedIn: true,
       source: "local",
       syncedToRemote: false,
+      lastLocalEdit: Date.now(),
     };
     saveRegistrationLocally(reg);
     loadData();
@@ -811,38 +816,23 @@ export function AdminDashboard() {
       brief: "",
     });
 
-    // Sync on-spot squad registration to Google Sheets in background
-    fetch("/api/registrations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${getAuthToken()}`,
-      },
-      body: JSON.stringify({
-        action: "register",
-        id: reg.id,
-        teamName: reg.teamName,
-        leaderName: reg.leaderName,
-        email: reg.email,
-        phone: reg.phone,
-        institution: reg.institution,
-        track: reg.track,
-        teamSize: reg.teamSize || "4",
-        brief: reg.brief || "",
-        timestamp: reg.timestamp,
-        checkedIn: reg.checkedIn,
-        memberNames: [],
-      }),
-    })
-      .then((res) => {
-        if (res.ok) {
-          const syncedReg: Registration = { ...reg, syncedToRemote: true, source: "remote" };
-          saveRegistrationLocally(syncedReg);
+    // Sync on-spot squad registration to Google Sheets in background with direct fallback
+    try {
+      const success = await syncAddSquadToRemote(reg);
+      if (success) {
+        const current = getStoredRegistrations();
+        const idx = current.findIndex((item) => item.id === reg.id);
+        if (idx >= 0) {
+          current[idx] = { ...current[idx], syncedToRemote: true, lastLocalEdit: Date.now() };
+          saveAllRegistrations(current);
+          loadData();
         }
-      })
-      .catch((err) => {
-        console.warn("Add Squad remote sync error:", err);
-      });
+      }
+    } catch (err) {
+      console.warn("Add Squad remote sync error:", err);
+    } finally {
+      setIsAddingSquad(false);
+    }
   };
 
   const handleExport = () => {
@@ -1986,8 +1976,15 @@ export function AdminDashboard() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" variant="alert" size="sm">
-                  Enroll & Check-in Squad
+                <Button type="submit" variant="alert" size="sm" disabled={isAddingSquad}>
+                  {isAddingSquad ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                      Enrolling Squad...
+                    </>
+                  ) : (
+                    "Enroll & Check-in Squad"
+                  )}
                 </Button>
               </div>
             </form>

@@ -134,13 +134,84 @@ export function setPaymentsWebhookUrl(url: string): void {
 }
 
 /**
+ * Syncs a new squad creation to Google Sheets via caching proxy (with direct fallback)
+ */
+export async function syncAddSquadToRemote(reg: Registration): Promise<boolean> {
+  const webhookUrl = getGoogleSheetsWebhookUrl();
+  const payload = {
+    action: "register",
+    id: reg.id,
+    teamName: reg.teamName,
+    leaderName: reg.leaderName,
+    email: reg.email,
+    phone: reg.phone,
+    institution: reg.institution,
+    track: reg.track,
+    teamSize: reg.teamSize || "4",
+    brief: reg.brief || "",
+    timestamp: reg.timestamp,
+    checkedIn: reg.checkedIn,
+    memberNames: reg.memberNames || [],
+    sheetsUrl: webhookUrl,
+    url: webhookUrl,
+  };
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    const res = await fetch("/api/registrations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getAuthToken()}`,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("application/json")) {
+      const data = (await res.json().catch(() => null)) as { success?: boolean } | null;
+      if (data && data.success !== false) {
+        return true;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn("Proxy add squad sync failed, trying direct fallback:", proxyErr);
+  }
+
+  // Direct fallback to Google Sheets Webhook
+  if (!webhookUrl) return false;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+
+    await fetch(webhookUrl, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    return true;
+  } catch (err) {
+    console.warn("Could not sync add squad to Google Sheets directly:", err);
+    return false;
+  }
+}
+
+/**
  * Syncs check-in status to Google Sheets via caching proxy (with direct fallback)
  */
 export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promise<boolean> {
   const webhookUrl = getGoogleSheetsWebhookUrl();
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 20000);
 
     const res = await fetch("/api/registrations", {
       method: "POST",
@@ -174,7 +245,7 @@ export async function syncCheckInToRemote(id: string, checkedIn: boolean): Promi
   if (!webhookUrl) return false;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 15000);
 
     await fetch(webhookUrl, {
       method: "POST",
@@ -203,7 +274,7 @@ export async function syncMemberNamesToRemote(id: string, memberNames: string[])
   const webhookUrl = getGoogleSheetsWebhookUrl();
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 20000);
 
     const res = await fetch("/api/registrations", {
       method: "POST",
@@ -237,7 +308,7 @@ export async function syncMemberNamesToRemote(id: string, memberNames: string[])
   if (!webhookUrl) return false;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 15000);
 
     await fetch(webhookUrl, {
       method: "POST",
@@ -263,7 +334,7 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
   const webhookUrl = getGoogleSheetsWebhookUrl();
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 20000);
 
     const res = await fetch("/api/registrations", {
       method: "POST",
@@ -296,7 +367,7 @@ export async function syncDeleteToRemote(id: string): Promise<boolean> {
   if (!webhookUrl) return false;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 15000);
 
     await fetch(webhookUrl, {
       method: "POST",
@@ -333,7 +404,7 @@ export async function syncPaymentToRemote(
   const action = paid ? "markPaid" : "markUnpaid";
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 20000);
 
     const res = await fetch("/api/registrations", {
       method: "POST",
@@ -372,7 +443,7 @@ export async function syncPaymentToRemote(
   if (!paymentsUrl) return false;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 15000);
 
     await fetch(paymentsUrl, {
       method: "POST",
@@ -755,10 +826,10 @@ export async function fetchRemoteRegistrations(
 
         const existing = map.get(r.id);
         if (existing) {
-          // If existing has non-blank fields and new one is blank, keep existing values
+          // If existing has non-blank fields and new one is blank or placeholder, keep existing values
           const merged: Registration = { ...existing };
-          if (r.teamName && r.teamName.trim()) merged.teamName = r.teamName;
-          if (r.leaderName && r.leaderName.trim()) merged.leaderName = r.leaderName;
+          if (r.teamName && r.teamName.trim() && r.teamName !== "Unnamed Squad") merged.teamName = r.teamName;
+          if (r.leaderName && r.leaderName.trim() && r.leaderName !== "Unknown") merged.leaderName = r.leaderName;
           if (r.email && r.email.trim()) merged.email = r.email;
           if (r.phone && r.phone.trim()) merged.phone = r.phone;
           if (r.institution && r.institution.trim()) merged.institution = r.institution;
@@ -781,19 +852,37 @@ export async function fetchRemoteRegistrations(
         local.length >= 4 && parsed.length < Math.ceil(local.length * 0.5);
 
       // 3. Reconcile with local records:
-      // If forceFresh is requested, remote Google Sheet / Payments data is 100% authoritative.
-      // If !forceFresh, only preserve very recent optimistic local edits (<15s) while background write completes.
+      // If forceFresh is requested, remote Google Sheet / Payments data is authoritative for statuses,
+      // but protect against blank/unnamed overwrites and keep recent local additions.
       local.forEach((r) => {
         const existing = map.get(r.id);
         if (existing) {
+          // Guard against remote having "Unnamed Squad" or empty if local already has a valid name
+          if (
+            (!existing.teamName || existing.teamName === "Unnamed Squad") &&
+            r.teamName &&
+            r.teamName !== "Unnamed Squad"
+          ) {
+            existing.teamName = r.teamName;
+          }
+          if (
+            (!existing.leaderName || existing.leaderName === "Unknown") &&
+            r.leaderName &&
+            r.leaderName !== "Unknown"
+          ) {
+            existing.leaderName = r.leaderName;
+          }
+
+          // Protect recent optimistic local edits (<60s) while Google Sheets background write catches up
           const isRecentLocalEdit =
             !options?.forceFresh &&
-            Boolean(r.lastLocalEdit && Date.now() - r.lastLocalEdit < 15000);
+            Boolean(r.lastLocalEdit && Date.now() - r.lastLocalEdit < 60000);
 
           if (isRecentLocalEdit) {
             if (typeof r.checkedIn === "boolean") existing.checkedIn = r.checkedIn;
             if (typeof r.paid === "boolean") existing.paid = r.paid;
             if (r.paymentRef !== undefined) existing.paymentRef = r.paymentRef;
+            if (Array.isArray(r.memberNames) && r.memberNames.length > 0) existing.memberNames = r.memberNames;
             existing.lastLocalEdit = r.lastLocalEdit;
           }
           existing.source = "remote";
@@ -811,13 +900,15 @@ export async function fetchRemoteRegistrations(
             return;
           }
 
-          // B. If this is a locally-created pending submission that hasn't synced to Google Sheets yet
-          // (created within the last 15 minutes or explicitly marked source: "local"), retain it.
+          // B. If this is a locally-created submission that hasn't synced to Google Sheets yet
+          // or was created/edited recently (within 5 minutes), retain it so it is never prematurely pruned!
+          const timeSinceCreated = r.timestamp ? Date.now() - new Date(r.timestamp).getTime() : Infinity;
+          const timeSinceEdit = r.lastLocalEdit ? Date.now() - r.lastLocalEdit : Infinity;
           const isPendingLocal =
             r.source === "local" ||
-            (!r.syncedToRemote &&
-              r.timestamp &&
-              Date.now() - new Date(r.timestamp).getTime() < 15 * 60 * 1000);
+            !r.syncedToRemote ||
+            timeSinceCreated < 5 * 60 * 1000 ||
+            timeSinceEdit < 5 * 60 * 1000;
 
           if (isPendingLocal) {
             const payInfo = paymentMap[r.id];
@@ -829,8 +920,8 @@ export async function fetchRemoteRegistrations(
             return;
           }
 
-          // C. Reconcile: Entry was sourced from remote (or previously synced) and is now deleted
-          // in the Google Sheet. By omitting map.set(r.id, r), it is removed from local storage.
+          // C. Reconcile: Entry was sourced from remote (or previously synced) and has been absent for >5 minutes.
+          // By omitting map.set(r.id, r), it is treated as genuinely deleted from Google Sheets.
         }
       });
 
@@ -891,7 +982,7 @@ export async function submitRegistrationData(
 
   // B. Submit to Google Sheets Webhook via our secure Proxy
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
+  const timer = setTimeout(() => controller.abort(), 20000);
 
   const sheetPromise = fetch("/api/registrations", {
     method: "POST",
