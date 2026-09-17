@@ -584,13 +584,14 @@ export async function fetchPaymentStatuses(
 export async function fetchRemoteRegistrations(
   urlOverride?: string,
   options?: { forceFresh?: boolean },
-): Promise<{ success: boolean; data: Registration[]; message?: string }> {
+): Promise<{ success: boolean; data: Registration[]; message?: string; paymentsStale?: boolean }> {
   const url = (urlOverride || getGoogleSheetsWebhookUrl()).trim();
   const paymentsUrl = getPaymentsWebhookUrl().trim();
+  let paymentsStale = false;
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     // Call caching proxy endpoint first
     let json: unknown = null;
@@ -606,6 +607,7 @@ export async function fetchRemoteRegistrations(
         signal: controller.signal,
       });
       if (proxyRes.status === 401) {
+        clearTimeout(timeout);
         return { success: false, data: [], message: "Unauthorized" };
       }
       const ct = proxyRes.headers.get("content-type") || "";
@@ -614,6 +616,10 @@ export async function fetchRemoteRegistrations(
         if (Array.isArray(parsedData)) {
           json = parsedData;
           isFromProxy = true;
+        } else if (parsedData && Array.isArray(parsedData.data)) {
+          json = parsedData.data;
+          isFromProxy = true;
+          paymentsStale = Boolean(parsedData.paymentsStale);
         } else if (parsedData && parsedData.error) {
           throw new Error(parsedData.error);
         }
@@ -622,6 +628,7 @@ export async function fetchRemoteRegistrations(
         throw new Error(`Proxy status ${proxyRes.status}: invalid response`);
       }
     } catch (proxyErr) {
+      clearTimeout(timeout);
       console.warn(
         "Proxy registrations fetch failed, falling back to direct Google Sheets:",
         proxyErr,
@@ -631,7 +638,7 @@ export async function fetchRemoteRegistrations(
         return { success: false, data: [], message: "No Google Sheets webhook URL configured." };
       }
       const directController = new AbortController();
-      const directTimer = setTimeout(() => directController.abort(), 12000);
+      const directTimer = setTimeout(() => directController.abort(), 20000);
       try {
         const directRes = await fetch(`${url}${url.includes("?") ? "&" : "?"}_t=${Date.now()}`, {
           method: "GET",
@@ -642,15 +649,20 @@ export async function fetchRemoteRegistrations(
         });
         clearTimeout(directTimer);
         if (directRes.ok) {
-          json = await directRes.json().catch(() => null);
+          const directData = await directRes.json().catch(() => null);
+          if (Array.isArray(directData)) {
+            json = directData;
+          } else if (directData && Array.isArray(directData.data)) {
+            json = directData.data;
+          }
         }
       } catch (directErr) {
         clearTimeout(directTimer);
         console.warn("Direct Google Sheets fallback failed:", directErr);
       }
+    } finally {
+      clearTimeout(timeout);
     }
-
-    clearTimeout(timeout);
 
     if (!Array.isArray(json)) {
       throw new Error("Remote response was not a valid array");
@@ -827,7 +839,7 @@ export async function fetchRemoteRegistrations(
       );
 
       saveAllRegistrations(merged);
-      return { success: true, data: merged };
+      return { success: true, data: merged, paymentsStale };
     }
 
     return {

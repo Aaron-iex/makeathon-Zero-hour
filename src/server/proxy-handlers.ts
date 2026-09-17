@@ -125,11 +125,13 @@ export async function handleRegistrationsProxy(
           : VERIFIED_PAYMENTS_URL;
 
     try {
+      const SHEETS_TIMEOUT_MS = 20000;
       const sheetsController = new AbortController();
-      const sheetsTimeout = setTimeout(() => sheetsController.abort(), 15000);
+      const sheetsTimeout = setTimeout(() => sheetsController.abort(), SHEETS_TIMEOUT_MS);
 
+      const PAYMENTS_TIMEOUT_MS = 10000;
       const paymentsController = new AbortController();
-      const paymentsTimeout = setTimeout(() => paymentsController.abort(), 8000);
+      const paymentsTimeout = setTimeout(() => paymentsController.abort(), PAYMENTS_TIMEOUT_MS);
 
       const fetchSheets = (async () => {
         try {
@@ -145,8 +147,13 @@ export async function handleRegistrationsProxy(
           if (r.ok) {
             return await r.json();
           }
-          throw new Error(`Sheets returned ${r.status}`);
-        } catch (err) {
+          throw new Error(`Sheets returned status ${r.status}`);
+        } catch (err: any) {
+          if (err?.name === "AbortError" || sheetsController.signal.aborted) {
+            console.error(`SHEETS_WEBHOOK_URL fetch timed out after ${SHEETS_TIMEOUT_MS}ms:`, err);
+          } else {
+            console.error("SHEETS_WEBHOOK_URL fetch error:", err);
+          }
           if (activeSheetsUrl !== VERIFIED_SHEETS_URL) {
             console.warn("Proxy: primary sheets URL failed, trying verified fallback:", err);
             const fallbackRes = await fetch(
@@ -168,8 +175,9 @@ export async function handleRegistrationsProxy(
         }
       })();
 
+      let paymentsFetchFailed = false;
       const fetchPayments = (async () => {
-        if (!activePaymentsUrl) return [];
+        if (!activePaymentsUrl) return { success: false, data: [] };
         try {
           const r = await fetch(
             `${activePaymentsUrl}${activePaymentsUrl.includes("?") ? "&" : "?"}_t=${now}`,
@@ -181,17 +189,26 @@ export async function handleRegistrationsProxy(
             },
           );
           if (r.ok) {
-            return await r.json();
+            const data = await r.json();
+            return { success: true, data };
           }
-          return [];
-        } catch (err) {
-          console.warn("Proxy: Failed to fetch payments (non-fatal):", err);
-          return [];
+          console.warn(`Proxy: Payments returned status ${r.status} (non-fatal)`);
+          paymentsFetchFailed = true;
+          return { success: false, data: [] };
+        } catch (err: any) {
+          paymentsFetchFailed = true;
+          if (err?.name === "AbortError" || paymentsController.signal.aborted) {
+            console.warn(`Proxy: PAYMENTS_WEBHOOK_URL fetch timed out after ${PAYMENTS_TIMEOUT_MS}ms (non-fatal):`, err);
+          } else {
+            console.warn("Proxy: Failed to fetch payments (non-fatal):", err);
+          }
+          return { success: false, data: [] };
         } finally {
           clearTimeout(paymentsTimeout);
         }
       })();
 
+      // SHEETS_WEBHOOK_URL fetch is primary and determines success or failure
       const [sheetsResult, paymentsResult] = await Promise.allSettled([fetchSheets, fetchPayments]);
 
       let sheetsData: any = null;
@@ -201,8 +218,13 @@ export async function handleRegistrationsProxy(
         throw sheetsResult.reason;
       }
 
-      const paymentsData =
-        paymentsResult.status === "fulfilled" ? paymentsResult.value : [];
+      const paymentsOutcome =
+        paymentsResult.status === "fulfilled"
+          ? paymentsResult.value
+          : { success: false, data: [] };
+
+      const paymentsData = paymentsOutcome.data;
+      const isPaymentsStale = !paymentsOutcome.success || paymentsFetchFailed;
       
       // Process Sheets Data & Deduplicate by ID (protecting against blank duplicate rows)
       const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
@@ -327,7 +349,12 @@ export async function handleRegistrationsProxy(
         };
       });
 
-      const responseBody = JSON.stringify(merged);
+      const responsePayload = {
+        success: true,
+        data: merged,
+        paymentsStale: isPaymentsStale,
+      };
+      const responseBody = JSON.stringify(responsePayload);
       
       registrationsCache.set(cacheKey, {
         body: responseBody,
@@ -346,11 +373,12 @@ export async function handleRegistrationsProxy(
         },
       });
       
-    } catch (err) {
+    } catch (err: any) {
       console.error("Registrations upstream fetch error in proxy-handlers:", err);
 
       const stale = registrationsCache.get(cacheKey);
       if (stale) {
+        console.warn("Proxy: Serving stale cached registrations due to upstream fetch failure");
         return new Response(stale.body, {
           status: 200,
           headers: {
@@ -362,10 +390,15 @@ export async function handleRegistrationsProxy(
         });
       }
 
+      const isTimeout = err?.name === "AbortError" || String(err).includes("aborted");
+      const errorMessage = isTimeout
+        ? "SHEETS_WEBHOOK_URL fetch timed out after 20000ms"
+        : `Upstream Google Sheet fetch failed: ${err instanceof Error ? err.message : String(err)}`;
+
       return jsonResponse(
         {
           success: false,
-          error: `Upstream Google Sheet fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+          error: errorMessage,
           detail: err instanceof Error ? err.stack || err.message : String(err),
         },
         502,
@@ -466,6 +499,8 @@ export async function handleRegistrationsProxy(
           paid: isPaid,
         };
 
+        console.log(`Calling SHEETS updatePayment for ${id}`);
+        console.log(`Calling PAYMENTS comms webhook for ${id}`);
         console.log(
           `[PROXY POST ${action}] Calling SHEETS_WEBHOOK_URL (${sheetsTargetUrl}):`,
           JSON.stringify(sheetPayload),

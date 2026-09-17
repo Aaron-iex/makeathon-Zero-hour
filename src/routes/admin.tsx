@@ -355,6 +355,7 @@ export function AdminDashboard() {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [paymentsStale, setPaymentsStale] = useState<boolean>(false);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -440,14 +441,19 @@ export function AdminDashboard() {
       setIsSyncing(true);
       setSyncError(null);
 
-      // Task 1 Step 3: Never stay in infinite "Syncing..." state — timeout of 20 seconds
+      // Never stay in infinite "Syncing..." state — timeout of 25 seconds
       const syncTimeout = setTimeout(() => {
         if (isSyncingRef.current) {
           isSyncingRef.current = false;
           setIsSyncing(false);
-          setSyncError("Sync failed — click Sync Live to retry");
+          setRegistrations((curr) => {
+            if (curr.length === 0) {
+              setSyncError("Sync timed out — click Sync Live to retry");
+            }
+            return curr;
+          });
         }
-      }, 20000);
+      }, 25000);
 
       try {
         const res = await fetchRemoteRegistrations(webhookUrl, { forceFresh: isFresh });
@@ -456,12 +462,28 @@ export function AdminDashboard() {
           handleLogout();
           return;
         }
-        if (res.success && res.data) {
+
+        if (res.paymentsStale !== undefined) {
+          setPaymentsStale(res.paymentsStale);
+        }
+
+        // If data was returned, NEVER show sync failed banner
+        if (res.data && res.data.length > 0) {
           setSyncError(null);
           setRegistrations(res.data);
           saveAllRegistrations(res.data);
+        } else if (res.success && res.data && res.data.length === 0) {
+          setSyncError(null);
+          setRegistrations([]);
+          saveAllRegistrations([]);
         } else {
-          setSyncError(res.message || "Sync failed — click Sync Live to retry");
+          // Only show sync failed when fetch itself returned 0 results AND indicated an actual error
+          setRegistrations((curr) => {
+            if (curr.length === 0) {
+              setSyncError(res.message || "Sync failed — click Sync Live to retry");
+            }
+            return curr;
+          });
           loadData();
         }
         setLastSyncTime(
@@ -473,8 +495,13 @@ export function AdminDashboard() {
         );
       } catch (err) {
         clearTimeout(syncTimeout);
-        console.error("Sync error:", err);
-        setSyncError("Sync failed — click Sync Live to retry");
+        console.error("Manual sync error:", err);
+        setRegistrations((curr) => {
+          if (curr.length === 0) {
+            setSyncError("Sync failed — click Sync Live to retry");
+          }
+          return curr;
+        });
         loadData();
       } finally {
         clearTimeout(syncTimeout);
@@ -527,11 +554,19 @@ export function AdminDashboard() {
         handleLogout();
         return;
       }
-      if (res.success && res.data) {
+      if (res.paymentsStale !== undefined) {
+        setPaymentsStale(res.paymentsStale);
+      }
+      if (res.success && res.data && res.data.length > 0) {
         setSyncError(null);
         setRegistrations(res.data);
         saveAllRegistrations(res.data);
+      } else if (res.success && res.data && res.data.length === 0) {
+        setRegistrations([]);
+        saveAllRegistrations([]);
       }
+      // If background poll fails or returns success: false, do NOT update syncError!
+      // Silently log and allow next interval to retry.
       setLastSyncTime(
         new Date().toLocaleTimeString([], {
           hour: "2-digit",
@@ -540,7 +575,8 @@ export function AdminDashboard() {
         }),
       );
     } catch (err) {
-      console.warn("Gentle auto-refresh warning:", err);
+      console.warn("Background auto-refresh warning (silent):", err);
+      // Never update syncError or show banner on background poll failure
     } finally {
       isAutoRefreshingRef.current = false;
       setIsAutoRefreshing(false);
@@ -1005,6 +1041,15 @@ export function AdminDashboard() {
                   <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   LIVE
                 </span>
+                {paymentsStale && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono-tech bg-amber-950/60 border border-amber-700/50 text-amber-400 font-medium cursor-help"
+                    title="Payments data is delayed from upstream Apps Script. Squad registrations are live; paid status is using cached data."
+                  >
+                    <span className="size-1.5 rounded-full bg-amber-400" />
+                    PAYMENTS DELAYED
+                  </span>
+                )}
               </div>
               <p className="text-[11px] font-mono-tech text-neutral-400 hidden sm:block">
                 Jaya Engineering College · Department of ECE
@@ -1061,7 +1106,7 @@ export function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {syncError && (
+        {syncError && registrations.length === 0 && (
           <div className="flex items-center justify-between p-3.5 bg-amber-950/40 border border-amber-800/60 rounded-xl text-xs font-mono-tech text-amber-300">
             <div className="flex items-center gap-2.5">
               <AlertTriangle className="size-4 shrink-0 text-amber-400" />
@@ -1213,6 +1258,12 @@ export function AdminDashboard() {
             >
               Open Google Form Backup <ExternalLink className="size-2.5 inline" />
             </a>
+            {paymentsStale && (
+              <p className="text-[10px] text-amber-400 font-mono-tech mt-1.5 flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-amber-400" />
+                Payments sync delayed (using cached status)
+              </p>
+            )}
           </div>
         </div>
 
