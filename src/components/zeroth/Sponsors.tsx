@@ -27,6 +27,14 @@ const SPONSORS: Sponsor[] = [
     status: "VERIFIED ALLY",
     website: "https://www.uniqtechnologies.co.in/",
   },
+  {
+    name: "Raj Housing & Estates",
+    category: "URBAN INFRASTRUCTURE & HOUSING DEVELOPMENT",
+    role: "Official Real Estate Partner",
+    image: "/images/sponsors/raj-housing.png",
+    status: "VERIFIED ALLY",
+    website: "https://rajhousing.co.in/",
+  },
 ];
 
 export function Sponsors() {
@@ -52,7 +60,7 @@ export function Sponsors() {
           </p>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto items-stretch">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto items-stretch">
           {SPONSORS.map((sponsor, index) => (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
