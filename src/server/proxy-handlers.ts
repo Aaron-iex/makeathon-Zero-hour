@@ -21,6 +21,7 @@ interface CacheRecord {
 }
 
 const registrationsCache = new Map<string, CacheRecord>();
+const lastKnownPaymentMap = new Map<string, { paid: boolean; paymentRef: string }>();
 const CACHE_TTL_MS = 8000;
 
 function getCorsHeaders(request: Request): Record<string, string> {
@@ -125,11 +126,11 @@ export async function handleRegistrationsProxy(
           : VERIFIED_PAYMENTS_URL;
 
     try {
-      const SHEETS_TIMEOUT_MS = 20000;
+      const SHEETS_TIMEOUT_MS = 25000;
       const sheetsController = new AbortController();
       const sheetsTimeout = setTimeout(() => sheetsController.abort(), SHEETS_TIMEOUT_MS);
 
-      const PAYMENTS_TIMEOUT_MS = 10000;
+      const PAYMENTS_TIMEOUT_MS = 25000;
       const paymentsController = new AbortController();
       const paymentsTimeout = setTimeout(() => paymentsController.abort(), PAYMENTS_TIMEOUT_MS);
 
@@ -224,7 +225,6 @@ export async function handleRegistrationsProxy(
           : { success: false, data: [] };
 
       const paymentsData = paymentsOutcome.data;
-      const isPaymentsStale = !paymentsOutcome.success || paymentsFetchFailed;
       
       // Process Sheets Data & Deduplicate by ID (protecting against blank duplicate rows)
       const rawRegs = Array.isArray(sheetsData) ? sheetsData : [];
@@ -258,44 +258,84 @@ export async function handleRegistrationsProxy(
       }
       
       const paymentMap = new Map<string, { paid: boolean; paymentRef: string }>();
-      for (const p of payArray) {
-        const pId = String(p.id || p.ID || p["Pass ID"] || "").trim();
-        if (!pId) continue;
-        const pPaid =
-          p.paid === true ||
-          String(p.paid || "").toLowerCase() === "true" ||
-          String(p.paid || "").toUpperCase() === "YES" ||
-          String(p.status || "").toLowerCase() === "paid" ||
-          Boolean(p.paymentRef);
-        const pRef = String(p.paymentRef || p.referenceId || p["Payment Ref"] || "").trim();
-        if (pPaid || pRef) {
-          paymentMap.set(pId, {
-            paid: true,
-            paymentRef: pRef,
-          });
+      if (payArray.length > 0) {
+        lastKnownPaymentMap.clear();
+        for (const p of payArray) {
+          const pId = String(p.id || p.ID || p["Pass ID"] || "").trim();
+          if (!pId) continue;
+          const pPaid =
+            p.paid === true ||
+            String(p.paid || "").toLowerCase() === "true" ||
+            String(p.paid || "").toUpperCase() === "YES" ||
+            String(p.status || "").toLowerCase() === "paid" ||
+            Boolean(p.paymentRef);
+          const pRef = String(p.paymentRef || p.referenceId || p["Payment Ref"] || "").trim();
+          if (pPaid || pRef) {
+            lastKnownPaymentMap.set(pId, {
+              paid: true,
+              paymentRef: pRef,
+            });
+            paymentMap.set(pId, {
+              paid: true,
+              paymentRef: pRef,
+            });
+          }
+        }
+      } else if (lastKnownPaymentMap.size > 0) {
+        // Retain verified in-memory payment records if upstream payments webhook is slow/laggy
+        for (const [k, v] of lastKnownPaymentMap.entries()) {
+          paymentMap.set(k, v);
         }
       }
+
+      const isPaymentsStale =
+        (!paymentsOutcome.success || paymentsFetchFailed) && lastKnownPaymentMap.size === 0;
 
       // Merge: Sheets data is primary for paid/paymentRef, Comms log is supplementary
       const merged = uniqueRegs.map((reg: any) => {
         const id = String(reg.id || reg.ID || reg["Pass ID"] || "");
         const pData = paymentMap.get(id);
 
-        // Direct Sheet fields (columns M and N)
-        const sheetPaid =
-          reg.paid === true ||
-          String(reg.paid || "").toLowerCase() === "true" ||
-          String(reg.paid || "").toUpperCase() === "YES" ||
-          String(reg["Paid"] || "").toUpperCase() === "YES" ||
-          String(reg.status || "").toLowerCase() === "paid";
+        // Direct Sheet fields (columns M and N, plus all common variations)
+        const sheetPaidVal = String(
+          reg.paid ??
+          reg["Paid"] ??
+          reg["Payment"] ??
+          reg["Payment Status"] ??
+          reg["payment_status"] ??
+          reg["PaymentStatus"] ??
+          reg["Paid Status"] ??
+          reg["Fee Status"] ??
+          reg["Fees"] ??
+          reg.status ??
+          "",
+        ).trim().toUpperCase();
 
         const sheetPaymentRef = String(
           reg.paymentRef ||
             reg["Payment Ref"] ||
             reg["payment_ref"] ||
             reg["Payment Reference ID"] ||
+            reg["Payment Reference"] ||
+            reg["Reference ID"] ||
+            reg["Reference"] ||
+            reg["UTR"] ||
+            reg["Transaction ID"] ||
+            reg["Txn ID"] ||
+            reg.referenceId ||
             "",
         ).trim();
+
+        const sheetPaid =
+          reg.paid === true ||
+          sheetPaidVal === "TRUE" ||
+          sheetPaidVal === "YES" ||
+          sheetPaidVal === "PAID" ||
+          sheetPaidVal === "DONE" ||
+          sheetPaidVal === "RECEIVED" ||
+          sheetPaidVal === "CONFIRMED" ||
+          sheetPaidVal === "OK" ||
+          Boolean(sheetPaymentRef);
 
         // Supplementary Comms log source
         const commsPaid = Boolean(pData && pData.paid);

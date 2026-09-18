@@ -534,7 +534,7 @@ export async function fetchPaymentStatuses(
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
     let json: unknown = null;
     try {
@@ -798,28 +798,29 @@ export async function fetchRemoteRegistrations(
         syncedToRemote: true,
       }));
 
-      // Pull payment statuses only if direct fallback was used (proxy already merged them)
+      // Pull payment statuses if direct fallback was used OR if proxy reported paymentsStale
       let paymentMap: Record<string, { paid?: boolean; paymentRef?: string }> = {};
-      if (!isFromProxy) {
+      if (!isFromProxy || paymentsStale) {
         const payments = await fetchPaymentStatuses(
           undefined,
           options?.forceFresh ? { forceFresh: true } : {},
         ).catch(() => ({ success: false, data: {} }));
         paymentMap = payments.data || {};
+        if (Object.keys(paymentMap).length > 0) {
+          paymentsStale = false;
+        }
       }
 
       // Merge with local records
       const local = getStoredRegistrations();
       const map = new Map<string, Registration>();
 
-      // 1. Put remote first and enrich with payments if direct fallback was used (safely merge duplicates)
+      // 1. Put remote first and enrich with payments if fetched (safely merge duplicates)
       parsed.forEach((r) => {
-        if (!isFromProxy) {
-          const payInfo = paymentMap[r.id];
-          if (payInfo) {
-            r.paid = payInfo.paid;
-            if (payInfo.paymentRef !== undefined) r.paymentRef = payInfo.paymentRef;
-          }
+        const payInfo = paymentMap[r.id];
+        if (payInfo) {
+          if (payInfo.paid) r.paid = true;
+          if (payInfo.paymentRef !== undefined) r.paymentRef = payInfo.paymentRef;
         }
         r.source = "remote";
         r.syncedToRemote = true;
@@ -871,6 +872,14 @@ export async function fetchRemoteRegistrations(
             r.leaderName !== "Unknown"
           ) {
             existing.leaderName = r.leaderName;
+          }
+
+          // Protect known payments: If squad was paid locally, DO NOT revert to unpaid unless forceFresh is requested AND payments are not stale
+          if (r.paid && !existing.paid && (!options?.forceFresh || paymentsStale)) {
+            existing.paid = true;
+            if (r.paymentRef && !existing.paymentRef) {
+              existing.paymentRef = r.paymentRef;
+            }
           }
 
           // Protect recent optimistic local edits (<60s) while Google Sheets background write catches up

@@ -1,13 +1,31 @@
 import { motion } from "framer-motion";
-import { Building2, ShieldCheck } from "lucide-react";
+import { Building2, ShieldCheck, ExternalLink } from "lucide-react";
 
-const SPONSORS = [
+interface Sponsor {
+  name: string;
+  category: string;
+  role: string;
+  image: string;
+  status: string;
+  website?: string;
+}
+
+const SPONSORS: Sponsor[] = [
   {
     name: "Cooper Elevators",
     category: "VERTICAL MOBILITY & INDUSTRIAL AUTOMATION",
     role: "Official Infrastructure Partner",
     image: "/images/sponsors/image.png",
     status: "VERIFIED ALLY",
+    website: "https://cooperelevators.com/",
+  },
+  {
+    name: "UNIQ Technologies",
+    category: "SOFTWARE DEVELOPMENT & TECH INNOVATION",
+    role: "Official Technology Partner",
+    image: "/images/sponsors/uniq-technologies.png",
+    status: "VERIFIED ALLY",
+    website: "https://www.uniqtechnologies.co.in/",
   },
 ];
 
@@ -34,7 +52,7 @@ export function Sponsors() {
           </p>
         </div>
 
-        <div className="mt-8 flex items-center justify-center">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto items-stretch">
           {SPONSORS.map((sponsor, index) => (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
@@ -43,7 +61,7 @@ export function Sponsors() {
               transition={{ duration: 0.4, delay: index * 0.1, ease: [0.16, 1, 0.3, 1] }}
               whileHover={{ y: -2 }}
               key={`${sponsor.name}-${index}`}
-              className="panel-tactical p-5 sm:p-7 border border-primary/40 bg-card/90 max-w-md w-full ascii-corners relative"
+              className="panel-tactical p-5 sm:p-7 border border-primary/40 bg-card/90 w-full ascii-corners relative flex flex-col justify-between"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-border/60 pb-3">
                 <span className="font-mono-tech text-[9px] tracking-[0.16em] sm:tracking-[0.2em] text-accent font-bold uppercase flex items-center gap-1.5 min-w-0 truncate">
@@ -56,17 +74,30 @@ export function Sponsors() {
                 </span>
               </div>
 
-              <div className="my-5 flex items-center justify-center p-3 bg-card/40 border border-border/40 clip-tactical min-h-[96px]">
+              <div className="my-5 flex items-center justify-center p-3 bg-card/40 border border-border/40 clip-tactical min-h-[96px] rounded">
                 <img
                   src={sponsor.image}
                   alt={`${sponsor.name} logo`}
                   loading="lazy"
-                  className="max-w-full h-16 sm:h-20 w-auto object-contain filter contrast-105"
+                  className="max-w-full h-16 sm:h-20 w-auto object-contain filter contrast-105 rounded"
                 />
               </div>
 
               <div className="border-t border-border/60 pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1 font-mono-tech text-[9px] text-muted-foreground uppercase tracking-wider">
-                <span className="font-bold text-foreground truncate">{sponsor.name}</span>
+                {sponsor.website ? (
+                  <a
+                    href={sponsor.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1 truncate group"
+                    title={`Visit ${sponsor.name}`}
+                  >
+                    <span className="truncate">{sponsor.name}</span>
+                    <ExternalLink className="size-2.5 opacity-60 group-hover:opacity-100 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="font-bold text-foreground truncate">{sponsor.name}</span>
+                )}
                 <span className="text-primary font-bold shrink-0">// {sponsor.role}</span>
               </div>
             </motion.div>
